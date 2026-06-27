@@ -17,6 +17,7 @@ import {
 } from '../calculations/engine';
 import { generateRecommendations } from '../calculations/recommendations';
 import { GoalCategory } from '../types';
+import { ragEngine } from './rag/engine';
 
 
 // ─── Auth Service ─────────────────────────────────────────────────────────────
@@ -726,9 +727,14 @@ export function getAIGoalCoachMessage(userId: string, goalId: string) {
   const options = getGoalOptions(userId, goalId);
   if (!goal || !options) return null;
 
+  // RAG Integration
+  const retrievedChunks = ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goals");
+  const promptContext = `Goal Name: ${goal.name}. Client needs to know options to fix shortfall.`;
+  const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
+
   return {
     goal_id: goalId,
-    message: `I noticed a $${goal.shortfall.toLocaleString()} shortfall in your ${goal.name} goal. We can address this without chasing risky returns! According to Edelman's methodology, you have three clear choices: you can increase your monthly savings to $${options.option_a_required_monthly_savings.toLocaleString()} (Option A), reduce your total target cost to $${options.option_b_supported_present_cost.toLocaleString()} (Option B), or simply delay your target date by ${options.option_c_delay_months} months (Option C). Which approach feels most comfortable for you?`,
+    message: `${synthesizedBase}\n\nOption A: Increase monthly savings to $${options.option_a_required_monthly_savings.toLocaleString()}.\nOption B: Reduce target cost to $${options.option_b_supported_present_cost.toLocaleString()}.\nOption C: Delay target date by ${options.option_c_delay_months} months.`,
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
   };
 }
@@ -737,16 +743,17 @@ export function getAIRetirementCoachMessage(userId: string) {
   const profile = repo.getClientProfile(userId);
   const age = profile?.age ?? 40;
   
+  // RAG Integration
+  const retrievedChunks = ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
+  const promptContext = `Retirement Plan for Age ${age}. Explain longevity and withdrawals.`;
+  const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
+  
   return {
     user_id: userId,
     sections: [
       {
-        title: 'Longevity Risk',
-        content: `At age ${age}, you must plan for a life expectancy of 95 or even 100. Medical advancements mean your retirement could last 30+ years. We need to ensure your portfolio outlives you.`,
-      },
-      {
-        title: 'Withdrawal Sequencing',
-        content: `When you retire, remember the Edelman withdrawal sequence to minimize tax drag: tap taxable brokerage accounts first, tax-deferred (Traditional IRA/401k) second, and tax-free (Roth) last.`,
+        title: 'Retirement Roadmap via RAG',
+        content: synthesizedBase,
       },
       {
         title: 'Spending Principal',
@@ -761,32 +768,30 @@ export function getAIRecommendationExplanation(userId: string, recId: string) {
   const rec = repo.getRecommendations(userId).find(r => r.id === recId);
   if (!rec) return null;
 
-  let issue = '';
-  let matters = '';
+  // RAG Integration
+  const categoryFilter = rec.category === "Debt" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
+  const retrievedChunks = ragEngine.semanticSearch(rec.category, categoryFilter);
+  const promptContext = `Explain rule violation for ${rec.category}.`;
+  const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
+
   let action = '';
 
   switch (rec.category) {
     case 'Debt':
-      issue = `You have high-interest debt dragging down your net worth.`;
-      matters = `Credit card debt compounds against you much faster than investments can grow, acting as a massive drag on wealth creation.`;
       action = `Pause extra investing and aggressively pay down this balance.`;
       break;
     case 'Emergency Fund':
-      issue = `Your liquid cash buffer is below the recommended safety threshold.`;
-      matters = `Without an emergency fund, unexpected expenses can force you into high-interest debt or cause you to liquidate investments at the worst possible time.`;
       action = `Redirect savings to a high-yield cash account until your safety net is full.`;
       break;
     default:
-      issue = `Your financial snapshot triggered a structural alert for ${rec.category}.`;
-      matters = `Ignoring this could disrupt your long-term compounding and financial security.`;
       action = `Review your current allocations and follow the priority action provided.`;
   }
 
   return {
     recommendation_id: recId,
     explanation: {
-      issue,
-      matters,
+      issue: `Rule Violation: ${rec.alert_message}`,
+      matters: synthesizedBase,
       action,
     },
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
