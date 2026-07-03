@@ -19,6 +19,30 @@ export function login(req: Request, res: Response) {
   return res.status(200).json(user);
 }
 
+export function register(req: Request, res: Response) {
+  const { email, password, name } = req.body;
+  if (!email || !password || !name) {
+    return res.status(400).json({ error: 'Email, password, and name are required.' });
+  }
+  try {
+    const user = svc.registerUser(email, password, name);
+    return res.status(201).json(user);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+}
+
+export function patchUserPreferences(req: Request, res: Response) {
+  try {
+    const { userId } = req.params;
+    const { display_currency } = req.body;
+    const result = svc.updateUserPreferences(userId, { display_currency });
+    return res.status(200).json(result);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to update preferences', detail: err.message });
+  }
+}
+
 // ─── Risk Questions ────────────────────────────────────────────────────────────
 export function getRiskQuestions(_req: Request, res: Response) {
   return res.status(200).json(svc.getRiskQuestions());
@@ -173,5 +197,19 @@ export function getAIRecommendationExplanation(req: Request, res: Response) {
     return res.status(200).json(data);
   } catch (err: any) {
     return res.status(500).json({ error: 'Failed to retrieve AI Recommendation Explanation.', detail: err.message });
+  }
+}
+
+export function postAIChat(req: Request, res: Response) {
+  try {
+    const { userId } = req.params;
+    const { message } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Message is required.' });
+    }
+    const data = svc.chatWithAdvisor(userId, message);
+    return res.status(200).json(data);
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Failed to process AI chat.', detail: err.message });
   }
 }

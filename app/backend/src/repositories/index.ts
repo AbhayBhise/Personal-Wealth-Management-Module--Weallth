@@ -15,10 +15,21 @@ import {
   RecommendationAlert, AlertStatus, HouseholdProfile, HouseholdMember,
   IncomeProfile, InsuranceProfile, Assumptions,
 } from '../types';
+import { saveDB } from '../services/db';
 
 // ─── Users ────────────────────────────────────────────────────────────────────
-export function findUserByCredentials(email: string, password: string): User | undefined {
-  return users.find(u => u.email === email && u.password_hash === password);
+export function findUserByEmail(email: string): User | undefined {
+  return users.find(u => u.email === email);
+}
+
+export function createUser(data: Omit<User, 'id'>): User {
+  const newUser: User = {
+    id: uuidv4(),
+    ...data,
+  };
+  users.push(newUser);
+  saveDB();
+  return newUser;
 }
 
 export function findUserById(userId: string): User | undefined {
@@ -28,7 +39,9 @@ export function findUserById(userId: string): User | undefined {
 export function updateUser(userId: string, updates: Partial<User>): User | null {
   const idx = users.findIndex(u => u.id === userId);
   if (idx === -1) return null;
+  if (idx === -1) return null;
   users[idx] = { ...users[idx], ...updates };
+  saveDB();
   return users[idx];
 }
 
@@ -48,9 +61,11 @@ export function upsertClientProfile(userId: string, data: Partial<ClientProfile>
       ...data,
     };
     clientProfiles.push(newProfile);
+    saveDB();
     return newProfile;
   }
   clientProfiles[idx] = { ...clientProfiles[idx], ...data };
+  saveDB();
   return clientProfiles[idx];
 }
 
@@ -70,9 +85,11 @@ export function upsertHouseholdProfile(userId: string, data: Partial<HouseholdPr
       ...data,
     };
     householdProfiles.push(newProfile);
+    saveDB();
     return newProfile;
   }
   householdProfiles[idx] = { ...householdProfiles[idx], ...data };
+  saveDB();
   return householdProfiles[idx];
 }
 
@@ -83,6 +100,7 @@ export function addHouseholdMember(userId: string, member: Omit<HouseholdMember,
     ...member,
   };
   householdMembers.push(newMember);
+  saveDB();
   return newMember;
 }
 
@@ -100,9 +118,11 @@ export function upsertIncomeProfile(userId: string, data: Partial<IncomeProfile>
   if (idx === -1) {
     const newProfile: IncomeProfile = { user_id: userId, salary: 0, business: 0, rental: 0, other: 0, ...data };
     incomeProfiles.push(newProfile);
+    saveDB();
     return newProfile;
   }
   incomeProfiles[idx] = { ...incomeProfiles[idx], ...data };
+  saveDB();
   return incomeProfiles[idx];
 }
 
@@ -119,9 +139,11 @@ export function upsertInsuranceProfile(userId: string, data: Partial<InsurancePr
       disability_coverage_monthly: 0, has_long_term_care: false, ...data,
     };
     insuranceProfiles.push(newProfile);
+    saveDB();
     return newProfile;
   }
   insuranceProfiles[idx] = { ...insuranceProfiles[idx], ...data };
+  saveDB();
   return insuranceProfiles[idx];
 }
 
@@ -151,9 +173,11 @@ export function upsertAssumptions(userId: string, data: Partial<Assumptions>): A
       ...data,
     };
     assumptionsStore.push(newAssumptions);
+    saveDB();
     return newAssumptions;
   }
   assumptionsStore[idx] = { ...assumptionsStore[idx], ...data };
+  saveDB();
   return assumptionsStore[idx];
 }
 
@@ -165,6 +189,7 @@ export function getInstitutions(userId: string): Institution[] {
 export function createInstitution(userId: string, data: Omit<Institution, 'id' | 'user_id'>): Institution {
   const newInst: Institution = { id: uuidv4(), user_id: userId, ...data };
   institutions.push(newInst);
+  saveDB();
   return newInst;
 }
 
@@ -176,6 +201,7 @@ export function getAccounts(userId: string): Account[] {
 export function createAccount(userId: string, data: Omit<Account, 'id' | 'user_id'>): Account {
   const newAccount: Account = { id: uuidv4(), user_id: userId, ...data };
   accounts.push(newAccount);
+  saveDB();
   return newAccount;
 }
 
@@ -187,6 +213,7 @@ export function getHoldings(userId: string): Holding[] {
 export function createHolding(userId: string, data: Omit<Holding, 'id' | 'user_id'>): Holding {
   const newHolding: Holding = { id: uuidv4(), user_id: userId, ...data };
   holdings.push(newHolding);
+  saveDB();
   return newHolding;
 }
 
@@ -198,6 +225,7 @@ export function getLiabilities(userId: string): Liability[] {
 export function createLiability(userId: string, data: Omit<Liability, 'id' | 'user_id'>): Liability {
   const newLiability: Liability = { id: uuidv4(), user_id: userId, ...data };
   liabilities.push(newLiability);
+  saveDB();
   return newLiability;
 }
 
@@ -217,6 +245,7 @@ export function createGoal(userId: string, data: Omit<Goal, 'id' | 'user_id' | '
     created_at: now, updated_at: now, ...data,
   };
   goals.push(newGoal);
+  saveDB();
   return newGoal;
 }
 
@@ -224,6 +253,7 @@ export function updateGoal(userId: string, goalId: string, data: Partial<Goal>):
   const idx = goals.findIndex(g => g.user_id === userId && g.id === goalId);
   if (idx === -1) return null;
   goals[idx] = { ...goals[idx], ...data, updated_at: new Date().toISOString() };
+  saveDB();
   return goals[idx];
 }
 
@@ -231,6 +261,7 @@ export function deleteGoal(userId: string, goalId: string): boolean {
   const idx = goals.findIndex(g => g.user_id === userId && g.id === goalId);
   if (idx === -1) return false;
   goals.splice(idx, 1);
+  saveDB();
   return true;
 }
 
@@ -255,6 +286,7 @@ export function replaceRecommendations(userId: string, newRecs: Omit<Recommendat
     status: 'Active' as const,
   }));
   recommendations.push(...created);
+  saveDB();
   return created;
 }
 
@@ -262,6 +294,7 @@ export function updateRecommendationStatus(userId: string, recId: string, status
   const idx = recommendations.findIndex(r => r.user_id === userId && r.id === recId);
   if (idx === -1) return null;
   recommendations[idx] = { ...recommendations[idx], status };
+  saveDB();
   return recommendations[idx];
 }
 
@@ -282,6 +315,7 @@ export function appendWhsHistory(userId: string, score: number, category: string
     category,
     date: new Date().toISOString().slice(0, 10),
   });
+  saveDB();
 }
 
 // ─── Advisor → Client ─────────────────────────────────────────────────────────

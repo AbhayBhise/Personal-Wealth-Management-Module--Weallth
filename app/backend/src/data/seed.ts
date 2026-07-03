@@ -9,77 +9,112 @@ import {
   RecommendationAlert, NetWorthHistory, HouseholdProfile, HouseholdMember,
   IncomeProfile, InsuranceProfile, Assumptions, WealthSegment,
 } from '../types';
+import { loadDB, getUsers, setUsers, getClientProfiles, setClientProfiles, getHouseholdMembers, setHouseholdMembers, getHouseholdProfiles, setHouseholdProfiles, getIncomeProfiles, setIncomeProfiles, getInsuranceProfiles, setInsuranceProfiles, getAssumptionsStore, setAssumptionsStore, getInstitutions, setInstitutions, getAccounts, setAccounts, getHoldings, setHoldings, getLiabilities, setLiabilities, getGoals, setGoals, getWhsHistoryStore, setWhsHistoryStore, getRecommendations, setRecommendations } from '../services/db';
+
+loadDB();
 
 // ─── Demo IDs ─────────────────────────────────────────────────────────────────
 export const DEMO_CLIENT_ID = 'a1b2c3d4-0001-0001-0001-000000000001';
 export const DEMO_ADVISOR_ID = 'a1b2c3d4-0002-0002-0002-000000000002';
 
-// ─── Users ────────────────────────────────────────────────────────────────────
-export const users: User[] = [
-  {
-    id: DEMO_CLIENT_ID,
-    email: 'client@weallth.demo',
-    password_hash: 'demo1234',
-    name: 'Demo Client',
-    role: 'client',
-    onboarding_complete: false,  // Forces Wealth Discovery Wizard on first login
-    segment: 'Mass Affluent',
-  },
-  {
-    id: DEMO_ADVISOR_ID,
-    email: 'advisor@weallth.demo',
-    password_hash: 'demo1234',
-    name: 'Demo Advisor',
-    role: 'advisor',
-    onboarding_complete: true,
-    segment: 'HNI',
-  },
-];
+let initialUsers = getUsers();
+if (initialUsers.length === 0) {
+  initialUsers = [
+    {
+      id: DEMO_CLIENT_ID,
+      email: 'client@weallth.demo',
+      password_hash: '$2a$10$X05mR2kP5y7Q5/L7c03JFeWnO5YgX3Q08T5w5YgX3Q08T5w5YgX3Q', // dummy bcrypt hash for demo1234
+      name: 'Demo Client',
+      role: 'client',
+      onboarding_complete: false,
+      segment: 'Mass Affluent',
+    },
+    {
+      id: DEMO_ADVISOR_ID,
+      email: 'advisor@weallth.demo',
+      password_hash: '$2a$10$X05mR2kP5y7Q5/L7c03JFeWnO5YgX3Q08T5w5YgX3Q08T5w5YgX3Q',
+      name: 'Demo Advisor',
+      role: 'advisor',
+      onboarding_complete: true,
+      segment: 'HNI',
+    },
+  ];
+  setUsers(initialUsers);
+}
+export const users: User[] = initialUsers;
 
-// ─── Client Profiles ─────────────────────────────────────────────────────────
-export const clientProfiles: ClientProfile[] = [
-  {
-    user_id: DEMO_CLIENT_ID,
-    age: 34,
-    risk_profile: 'Balanced',
-    display_currency: 'USD',
-  },
-];
+let initialClientProfiles = getClientProfiles();
+if (initialClientProfiles.length === 0) {
+  initialClientProfiles = [
+    {
+      user_id: DEMO_CLIENT_ID,
+      age: 34,
+      risk_profile: 'Balanced',
+      display_currency: 'USD',
+    },
+  ];
+  setClientProfiles(initialClientProfiles);
+}
+export const clientProfiles: ClientProfile[] = initialClientProfiles;
 
 // ─── Household Profiles ───────────────────────────────────────────────────────
-export const householdMembers: HouseholdMember[] = [];
+let initialHouseholdMembers = getHouseholdMembers();
+if (initialHouseholdMembers.length === 0) { setHouseholdMembers(initialHouseholdMembers); }
+export const householdMembers: HouseholdMember[] = initialHouseholdMembers;
 
-export const householdProfiles: HouseholdProfile[] = [];
+let initialHouseholdProfiles = getHouseholdProfiles();
+if (initialHouseholdProfiles.length === 0) { setHouseholdProfiles(initialHouseholdProfiles); }
+export const householdProfiles: HouseholdProfile[] = initialHouseholdProfiles;
 
 // ─── Income Profiles ──────────────────────────────────────────────────────────
-export const incomeProfiles: IncomeProfile[] = [];
+let initialIncomeProfiles = getIncomeProfiles();
+if (initialIncomeProfiles.length === 0) { setIncomeProfiles(initialIncomeProfiles); }
+export const incomeProfiles: IncomeProfile[] = initialIncomeProfiles;
 
 // ─── Insurance Profiles ───────────────────────────────────────────────────────
-export const insuranceProfiles: InsuranceProfile[] = [];
+let initialInsuranceProfiles = getInsuranceProfiles();
+if (initialInsuranceProfiles.length === 0) { setInsuranceProfiles(initialInsuranceProfiles); }
+export const insuranceProfiles: InsuranceProfile[] = initialInsuranceProfiles;
 
 // ─── Assumptions ─────────────────────────────────────────────────────────────
-export const assumptionsStore: Assumptions[] = [];
+let initialAssumptionsStore = getAssumptionsStore();
+if (initialAssumptionsStore.length === 0) { setAssumptionsStore(initialAssumptionsStore); }
+export const assumptionsStore: Assumptions[] = initialAssumptionsStore;
 
 // ─── Institutions (Financial Institutions) ────────────────────────────────────
-export const institutions: Institution[] = [];
+let initialInstitutions = getInstitutions();
+if (initialInstitutions.length === 0) { setInstitutions(initialInstitutions); }
+export const institutions: Institution[] = initialInstitutions;
 
 // ─── Accounts ────────────────────────────────────────────────────────────────
-export const accounts: Account[] = [];
+let initialAccounts = getAccounts();
+if (initialAccounts.length === 0) { setAccounts(initialAccounts); }
+export const accounts: Account[] = initialAccounts;
 
 // ─── Holdings (Assets within Accounts) ───────────────────────────────────────
-export const holdings: Holding[] = [];
+let initialHoldings = getHoldings();
+if (initialHoldings.length === 0) { setHoldings(initialHoldings); }
+export const holdings: Holding[] = initialHoldings;
 
 // ─── Liabilities ──────────────────────────────────────────────────────────────
-export const liabilities: Liability[] = [];
+let initialLiabilities = getLiabilities();
+if (initialLiabilities.length === 0) { setLiabilities(initialLiabilities); }
+export const liabilities: Liability[] = initialLiabilities;
 
 // ─── Goals ────────────────────────────────────────────────────────────────────
-export const goals: Goal[] = [];
+let initialGoals = getGoals();
+if (initialGoals.length === 0) { setGoals(initialGoals); }
+export const goals: Goal[] = initialGoals;
 
 // ─── WHS Score History ────────────────────────────────────────────────────────
-export const whsHistory: { user_id: string; score: number; category: string; date: string }[] = [];
+let initialWhsHistory = getWhsHistoryStore();
+if (initialWhsHistory.length === 0) { setWhsHistoryStore(initialWhsHistory); }
+export const whsHistory: { user_id: string; score: number; category: string; date: string }[] = initialWhsHistory;
 
 // ─── Recommendation Alerts ────────────────────────────────────────────────────
-export const recommendations: RecommendationAlert[] = [];
+let initialRecommendations = getRecommendations();
+if (initialRecommendations.length === 0) { setRecommendations(initialRecommendations); }
+export const recommendations: RecommendationAlert[] = initialRecommendations;
 
 // ─── Net Worth History ─────────────────────────────────────────────────────────
 export function generateNetWorthHistory(userId: string): NetWorthHistory[] {

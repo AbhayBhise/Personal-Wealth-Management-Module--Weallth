@@ -1,12 +1,15 @@
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { useAppStore } from './store/useAppStore';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Goals from './pages/Goals';
 import Onboarding from './pages/Onboarding';
+import { CurrencySelector } from './components/CurrencySelector';
+import { AIChatWidget } from './components/AIChatWidget';
 
 function NavBar() {
-  const { user, setUser } = useAppStore();
+  const { user, logout } = useAppStore();
   const location = useLocation();
   if (!user || !user.onboarding_complete) return null;
 
@@ -32,10 +35,11 @@ function NavBar() {
         </nav>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <CurrencySelector />
         <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
           {user.name} · <span style={{ color: 'var(--accent-primary)' }}>{user.segment}</span>
         </span>
-        <button onClick={() => setUser(null)} style={{
+        <button onClick={logout} style={{
           background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)',
           color: 'var(--text-primary)', padding: '0.4rem 1rem', borderRadius: '6px',
           cursor: 'pointer', fontSize: '0.8rem',
@@ -69,6 +73,7 @@ export default function App() {
         <main className="app-main">
           <Routes>
             <Route path="/login" element={!user ? <Login /> : user.onboarding_complete ? <Navigate to="/dashboard" replace /> : <Navigate to="/onboarding" replace />} />
+            <Route path="/register" element={<Register />} />
             <Route path="/onboarding" element={requireOnboarding(<Onboarding />)} />
             <Route path="/dashboard" element={requireAuth(<Dashboard />)} />
             <Route path="/goals" element={requireAuth(<Goals />)} />
@@ -76,6 +81,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
+        {user && user.onboarding_complete && <AIChatWidget />}
       </div>
     </BrowserRouter>
   );

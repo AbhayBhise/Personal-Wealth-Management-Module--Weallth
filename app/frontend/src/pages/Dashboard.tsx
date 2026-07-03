@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../store/useAppStore';
+import { API_BASE } from '../services/api';
 import ScoreGauge from '../components/ScoreGauge';
 import NetWorthChart from '../components/NetWorthChart';
 import AssetAllocationChart from '../components/AssetAllocationChart';
 import PerformanceChart from '../components/PerformanceChart';
 import RebalancingAlertsPanel from '../components/RebalancingAlerts';
 import HoldingsView from '../components/HoldingsView';
-
+import { formatCurrency } from '../utils/formatters';
 
 const PRIORITY_COLORS: Record<string, string> = {
   Critical: '#e63946', High: '#f4a261', Medium: '#2ec4b6', Low: '#94A3B8',
@@ -31,6 +32,7 @@ export default function Dashboard() {
     portfolioSummary, portfolioPerformance, assetAllocation, rebalancingAlerts,
     isLoadingPortfolio, fetchPortfolioData,
     aiRetirementCoachMessage, fetchAIRetirementCoach,
+    currency,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'portfolio'>('overview');
@@ -115,7 +117,7 @@ export default function Dashboard() {
               <h3 style={{ margin: '0 0 1rem', fontSize: '0.875rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Financial Overview</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}>
                 {[
-                  { label: 'Net Worth', value: `$${currentNetWorth.toLocaleString()}`, color: currentNetWorth >= 0 ? 'var(--status-healthy)' : '#e63946' },
+                  { label: 'Net Worth', value: formatCurrency(currentNetWorth, currency), color: currentNetWorth >= 0 ? 'var(--status-healthy)' : '#e63946' },
                   { label: 'Savings Rate', value: `${whs?.savings_rate ?? 0}%`, color: (whs?.savings_rate ?? 0) >= 15 ? 'var(--status-healthy)' : 'var(--status-caution)' },
                   { label: 'Emergency Fund', value: `${whs?.emergency_fund_coverage ?? 0}mo`, color: (whs?.emergency_fund_coverage ?? 0) >= 6 ? 'var(--status-healthy)' : 'var(--status-caution)' },
                   { label: 'Retirement Ready', value: `${whs?.retirement_readiness ?? 0}%`, color: (whs?.retirement_readiness ?? 0) >= 70 ? 'var(--status-healthy)' : '#e63946' },
@@ -173,7 +175,7 @@ export default function Dashboard() {
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
                           <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{goal.name}</span>
                           <span style={{ fontSize: '0.75rem', color: goal.shortfall > 0 ? 'var(--status-caution)' : 'var(--status-healthy)' }}>
-                            {goal.shortfall > 0 ? `$${goal.shortfall.toLocaleString()} gap` : '✓ On Track'}
+                            {goal.shortfall > 0 ? `${formatCurrency(goal.shortfall, currency)} gap` : '✓ On Track'}
                           </span>
                         </div>
                         <div style={{ height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px' }}>
@@ -274,7 +276,7 @@ export default function Dashboard() {
                 </h3>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                {aiRetirementCoachMessage.sections.map(sec => (
+                {aiRetirementCoachMessage.sections.map((sec: any) => (
                   <div key={sec.title} style={{ background: 'rgba(0,0,0,0.2)', padding: '1rem', borderRadius: '8px' }}>
                     <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.85rem', color: 'var(--text-primary)' }}>{sec.title}</h4>
                     <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
@@ -304,8 +306,8 @@ export default function Dashboard() {
               {/* Portfolio KPIs */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem' }}>
                 {[
-                  { label: 'Portfolio Value', value: `$${portfolioSummary.total_portfolio_value.toLocaleString()}`, color: 'var(--accent-primary)' },
-                  { label: 'Net Worth', value: `$${portfolioSummary.net_worth.toLocaleString()}`, color: portfolioSummary.net_worth >= 0 ? 'var(--status-healthy)' : '#e63946' },
+                  { label: 'Portfolio Value', value: formatCurrency(portfolioSummary.total_portfolio_value, currency), color: 'var(--accent-primary)' },
+                  { label: 'Net Worth', value: formatCurrency(portfolioSummary.net_worth, currency), color: portfolioSummary.net_worth >= 0 ? 'var(--status-healthy)' : '#e63946' },
                   { label: 'Risk Profile', value: portfolioSummary.risk_profile, color: 'var(--text-primary)' },
                   { label: 'Rebalance Needed', value: rebalancingAlerts?.needs_rebalance ? `⚠ ${rebalancingAlerts.alert_count} Alerts` : '✓ Aligned', color: rebalancingAlerts?.needs_rebalance ? '#f4a261' : 'var(--status-healthy)' },
                 ].map(({ label, value, color }) => (

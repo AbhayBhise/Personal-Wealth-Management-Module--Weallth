@@ -14,6 +14,8 @@ export interface AuthUser {
   role: UserRole;
   onboarding_complete: boolean;
   segment: WealthSegment;
+  display_currency?: string;
+  token?: string;
 }
 
 export interface Goal {

@@ -4,6 +4,8 @@
  * Highlights asset classes that need rebalancing in amber/red.
  */
 import { AssetAllocation } from '../types';
+import { useAppStore } from '../store/useAppStore';
+import { formatCurrency } from '../utils/formatters';
 
 const CATEGORY_COLORS: Record<string, string> = {
   Stocks: '#6366f1',
@@ -27,6 +29,7 @@ interface Props {
 }
 
 export default function AssetAllocationChart({ allocation }: Props) {
+  const { currency } = useAppStore();
   const { breakdown, total_portfolio_value, needs_rebalance, total_drift_pct, risk_profile } = allocation;
 
   const validItems = breakdown.filter(b => b.current_pct > 0);
@@ -79,7 +82,7 @@ export default function AssetAllocationChart({ allocation }: Props) {
               />
             ))}
             <text x="50" y="47" textAnchor="middle" fill="white" fontSize="9" fontWeight="700">
-              ${(total_portfolio_value / 1000).toFixed(0)}K
+              {formatCurrency(total_portfolio_value, currency).replace(/(\.00|,\d{3})+/, 'k').replace(/000$/, '')}
             </text>
             <text x="50" y="58" textAnchor="middle" fill="#94a3b8" fontSize="6">Portfolio</text>
           </svg>

@@ -20,16 +20,57 @@ import { GoalCategory } from '../types';
 import { ragEngine } from './rag/engine';
 
 
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-demo';
+
 // ─── Auth Service ─────────────────────────────────────────────────────────────
 export function loginUser(email: string, password: string) {
-  const user = repo.findUserByCredentials(email, password);
-  if (!user) return null;
+  const user = repo.findUserByEmail(email);
+  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    return null;
+  }
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
   return {
     id: user.id,
     name: user.name,
     role: user.role,
     onboarding_complete: user.onboarding_complete,
     segment: user.segment,
+    token,
+  };
+}
+
+export function registerUser(email: string, password: string, name: string) {
+  const existing = repo.findUserByEmail(email);
+  if (existing) throw new Error('User already exists');
+
+  const password_hash = bcrypt.hashSync(password, 10);
+  const user = repo.createUser({
+    email,
+    password_hash,
+    name,
+    role: 'client',
+    onboarding_complete: false,
+    segment: 'Mass Affluent',
+  });
+
+  const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+  return {
+    id: user.id,
+    name: user.name,
+    role: user.role,
+    onboarding_complete: user.onboarding_complete,
+    segment: user.segment,
+    token,
+  };
+}
+
+export function updateUserPreferences(userId: string, preferences: { display_currency?: string }) {
+  const profile = repo.upsertClientProfile(userId, preferences);
+  return {
+    display_currency: profile.display_currency
   };
 }
 
@@ -795,6 +836,29 @@ export function getAIRecommendationExplanation(userId: string, recId: string) {
       action,
     },
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
+  };
+}
+
+export function chatWithAdvisor(userId: string, message: string) {
+  const profile = repo.getClientProfile(userId);
+  const context = `User Profile: Age ${profile?.age ?? 'Unknown'}. User Message: ${message}`;
+  
+  // Retrieve relevant Edelman rules
+  const retrievedChunks = ragEngine.semanticSearch(message);
+  
+  // Synthesize response
+  console.log(`[AI CHAT] Generating response for user ${userId}`);
+  
+  let responseText = "";
+  if (retrievedChunks.length > 0) {
+    responseText = `According to our principles: "${retrievedChunks[0].text}"\n\nHow can I help you apply this to your specific financial situation?`;
+  } else {
+    responseText = "I'm here to help you build wealth using our proven methodology. Could you provide a bit more detail about what you'd like to discuss?";
+  }
+
+  return {
+    reply: responseText,
+    disclaimer: 'Advisory simulation only. Not financial advice.'
   };
 }
 

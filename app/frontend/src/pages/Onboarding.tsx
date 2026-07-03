@@ -658,7 +658,7 @@ function Step6Risk({ form, update, questions }: any) {
 
   let profilePreview = '';
   if (answered > 0) {
-    const projected = Math.round((currentScore / answered) * total);
+    const projected = Math.round(((currentScore as number) / answered) * total);
     if (projected <= 20) profilePreview = 'Conservative';
     else if (projected <= 30) profilePreview = 'Moderately Conservative';
     else if (projected <= 42) profilePreview = 'Balanced';

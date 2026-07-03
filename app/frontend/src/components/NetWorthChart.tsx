@@ -1,12 +1,15 @@
 import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { NetWorthHistory } from '../types';
+import { useAppStore } from '../store/useAppStore';
+import { formatCurrency } from '../utils/formatters';
 
 interface NetWorthChartProps {
   data: NetWorthHistory[];
 }
 
 const NetWorthChart: React.FC<NetWorthChartProps> = ({ data }) => {
+  const { currency } = useAppStore();
   return (
     <div style={{ width: '100%', height: 300 }}>
       <ResponsiveContainer>
@@ -27,11 +30,14 @@ const NetWorthChart: React.FC<NetWorthChartProps> = ({ data }) => {
           />
           <YAxis 
             stroke="var(--text-secondary)"
-            tickFormatter={(val) => `$${(val / 1000).toFixed(0)}k`}
+            tickFormatter={(val) => {
+              const formatted = formatCurrency(val, currency);
+              return formatted.replace(/(\.00|,\d{3})+/, 'k').replace(/000$/, ''); // rough approximation for k
+            }}
           />
           <Tooltip 
             contentStyle={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-            formatter={(value: number) => [`$${value.toLocaleString()}`, 'Net Worth']}
+            formatter={(value: number) => [formatCurrency(value, currency), 'Net Worth']}
           />
           <Area 
             type="monotone" 

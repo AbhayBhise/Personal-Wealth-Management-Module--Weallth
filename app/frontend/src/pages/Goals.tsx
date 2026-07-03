@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { API_BASE } from '../services/api';
 import { Goal, AIGoalCoachMessage } from '../types';
+import { formatCurrency } from '../utils/formatters';
 
 interface GoalOptions {
   goal_id: string;
@@ -16,7 +17,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export default function Goals() {
-  const { user } = useAppStore();
+  const { user, currency } = useAppStore();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [options, setOptions] = useState<Record<string, GoalOptions>>({});
   const [coachMessages, setCoachMessages] = useState<Record<string, AIGoalCoachMessage>>({});
@@ -134,7 +135,7 @@ export default function Goals() {
               <div style={{ marginBottom: '1.25rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
                   <span>{fundedPct}% funded</span>
-                  <span>${goal.already_saved.toLocaleString()} / ${goal.target_amount.toLocaleString()}</span>
+                  <span>{formatCurrency(goal.already_saved, currency)} / {formatCurrency(goal.target_amount, currency)}</span>
                 </div>
                 <div style={{ height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px' }}>
                   <div style={{
@@ -149,12 +150,12 @@ export default function Goals() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Monthly Contribution</div>
-                  <div style={{ fontWeight: 600 }}>${goal.monthly_contribution.toLocaleString()}</div>
+                  <div style={{ fontWeight: 600 }}>{formatCurrency(goal.monthly_contribution, currency)}</div>
                 </div>
                 <div style={{ background: 'rgba(0,0,0,0.2)', padding: '0.75rem', borderRadius: '8px' }}>
                   <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem' }}>Projected Shortfall</div>
                   <div style={{ fontWeight: 600, color: goal.shortfall > 0 ? 'var(--status-caution)' : 'var(--status-healthy)' }}>
-                    {goal.shortfall > 0 ? `$${goal.shortfall.toLocaleString()}` : '✓ On Track'}
+                    {goal.shortfall > 0 ? formatCurrency(goal.shortfall, currency) : '✓ On Track'}
                   </div>
                 </div>
               </div>
@@ -181,11 +182,11 @@ export default function Goals() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <span style={{ fontWeight: 700, color: 'var(--status-healthy)', minWidth: '16px' }}>A</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>Increase savings to <strong style={{ color: 'var(--text-primary)' }}>${opt.option_a_required_monthly_savings.toLocaleString()}/mo</strong></span>
+                      <span style={{ color: 'var(--text-secondary)' }}>Increase savings to <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(opt.option_a_required_monthly_savings, currency)}/mo</strong></span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <span style={{ fontWeight: 700, color: 'var(--status-caution)', minWidth: '16px' }}>B</span>
-                      <span style={{ color: 'var(--text-secondary)' }}>Reduce target to <strong style={{ color: 'var(--text-primary)' }}>${opt.option_b_supported_present_cost.toLocaleString()}</strong></span>
+                      <span style={{ color: 'var(--text-secondary)' }}>Reduce target to <strong style={{ color: 'var(--text-primary)' }}>{formatCurrency(opt.option_b_supported_present_cost, currency)}</strong></span>
                     </div>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <span style={{ fontWeight: 700, color: '#6366f1', minWidth: '16px' }}>C</span>

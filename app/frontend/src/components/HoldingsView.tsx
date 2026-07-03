@@ -3,6 +3,8 @@
  * Shows asset class, value, and liquidity flag for each holding.
  */
 import { PortfolioSummary } from '../types';
+import { useAppStore } from '../store/useAppStore';
+import { formatCurrency } from '../utils/formatters';
 
 const CATEGORY_COLORS: Record<string, string> = {
   Stocks: '#6366f1', 'Mutual Funds': '#8b5cf6', Bonds: '#2ec4b6',
@@ -17,6 +19,7 @@ interface Props {
 }
 
 export default function HoldingsView({ summary }: Props) {
+  const { currency } = useAppStore();
   const { by_asset_class, by_institution, total_portfolio_value, holdings_count, account_count, institution_count } = summary;
 
   return (
@@ -50,7 +53,7 @@ export default function HoldingsView({ summary }: Props) {
               <div style={{ width: '10px', height: '10px', borderRadius: '2px', background: getColor(item.category) }} />
               <span style={{ fontSize: '0.8rem', fontWeight: 500 }}>{item.category}</span>
               <span style={{ fontSize: '0.8rem', fontWeight: 700, textAlign: 'right' }}>
-                ${item.value.toLocaleString()}
+                {formatCurrency(item.value, currency)}
               </span>
               <div style={{ position: 'relative', height: '6px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px' }}>
                 <div style={{
@@ -88,7 +91,7 @@ export default function HoldingsView({ summary }: Props) {
                 </div>
                 <span style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>{pct.toFixed(1)}%</span>
                 <span style={{ fontSize: '0.875rem', fontWeight: 700, color: 'var(--accent-primary)' }}>
-                  ${inst.total_value.toLocaleString()}
+                  {formatCurrency(inst.total_value, currency)}
                 </span>
               </div>
             );

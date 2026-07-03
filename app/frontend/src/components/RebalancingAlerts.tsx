@@ -4,12 +4,15 @@
  * Aligns with the research safety guardrails.
  */
 import { RebalancingAlerts as RebalancingAlertsType } from '../types';
+import { useAppStore } from '../store/useAppStore';
+import { formatCurrency } from '../utils/formatters';
 
 interface Props {
   alerts: RebalancingAlertsType;
 }
 
 export default function RebalancingAlertsPanel({ alerts }: Props) {
+  const { currency } = useAppStore();
   const { needs_rebalance, total_drift_pct, alert_count, alerts: items, risk_profile } = alerts;
 
   if (!needs_rebalance || items.length === 0) {
@@ -79,7 +82,7 @@ export default function RebalancingAlertsPanel({ alerts }: Props) {
             </span>
             <span style={{ color: 'var(--text-secondary)' }}>
               Est. Amount: <strong style={{ color: 'var(--accent-primary)' }}>
-                ${alert.amount_to_move.toLocaleString()}
+                {formatCurrency(alert.amount_to_move, currency)}
               </strong>
             </span>
           </div>

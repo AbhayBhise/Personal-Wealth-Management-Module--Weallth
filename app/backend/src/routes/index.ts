@@ -9,6 +9,8 @@ const router = Router();
 
 // ─── Auth ──────────────────────────────────────────────────────────────────────
 router.post('/auth/login', ctrl.login);
+router.post('/auth/register', ctrl.register);
+router.patch('/users/:userId/preferences', ctrl.patchUserPreferences);
 
 // ─── Risk Questions (for Step 6 of onboarding) ────────────────────────────────
 router.get('/risk-questions', ctrl.getRiskQuestions);
@@ -48,6 +50,7 @@ router.get('/users/:userId/portfolio/rebalancing', ctrl.getRebalancingAlerts);
 router.get('/users/:userId/goals/:goalId/coach', ctrl.getAIGoalCoachMessage);
 router.get('/users/:userId/retirement-coach', ctrl.getAIRetirementCoachMessage);
 router.get('/users/:userId/recommendations/:recId/explain', ctrl.getAIRecommendationExplanation);
+router.post('/users/:userId/ai/chat', ctrl.postAIChat);
 
 export default router;
 
