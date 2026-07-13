@@ -93,7 +93,13 @@ Any commit (or pull request) that adds, modifies, or deprecates a knowledge obje
 
 ---
 
-## 8. IEEE Mapping (for academic/internship reporting)
+## 8. Technology & Version Pinning
+
+- **Prisma**: Pinned to v5 (specifically `@prisma/client@5` and `prisma@5`) as of July 2026. This was a deliberate choice during the JSON-to-Postgres migration. Prisma v7 (released late 2025) removed `schema.prisma`-based URL configs and mandated a new `prisma.config.ts` system with mandatory driver adapters. To maintain environment simplicity (`DATABASE_URL` in `.env`) during this prototype phase, v5 is used. Revisit this before any real production deployment.
+
+---
+
+## 9. IEEE Mapping (for academic/internship reporting)
 
 For formal traceability, the following mapping can be cited:
 
