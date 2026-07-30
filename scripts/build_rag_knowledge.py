@@ -53,11 +53,16 @@ def categorize_content(title, text):
 print("--- Step 1: Processing Ric Edelman Book (EPUB) ---")
 epub_path = os.path.join(WEALLTH_DIR, 'Discover The Wealth Within You', 'Ric Edelman - Discover the Wealth Within You_ A Financial Plan For Creating a Rich and Fulfilling Life-HarperCollins (2010).epub')
 
+skip_files = {'001-cover', '002-titlepage', '003-dedcation', '004-toc', '005-frontmatter1', '006-frontmatter2', '007-frontmatter3', '008-frontmatter4'}
+
 if os.path.exists(epub_path):
     with zipfile.ZipFile(epub_path) as z:
         html_files = sorted([f for f in z.namelist() if f.endswith(('.html', '.xhtml', '.htm'))])
         chunk_idx = 1
         for fname in html_files:
+            if any(s in fname for s in skip_files):
+                continue
+
             content = z.read(fname).decode('utf-8', errors='ignore')
             text = clean_text(content)
             
@@ -65,13 +70,16 @@ if os.path.exists(epub_path):
             h1_match = re.search(r'<h[12][^>]*>(.*?)</h[12]>', content, re.IGNORECASE)
             chapter_title = clean_text(h1_match.group(1)) if h1_match else (clean_text(title_match.group(1)) if title_match else fname)
             
-            if len(text) < 100 or 'Table of Contents' in chapter_title:
+            if len(text) < 150 or 'Table of Contents' in chapter_title or 'Dedicated to' in text:
                 continue
 
             sub_chunks = chunk_text(text, max_words=350, overlap=50)
             category = categorize_content(chapter_title, text)
             
             for sc in sub_chunks:
+                # Filter out raw cover text repetitions
+                if 'DISCOVER THE WEALTH WITHIN YOU A Financial Plan for Creating a Rich' in sc and len(sc) < 250:
+                    continue
                 chunks.append({
                     "id": f"dwwy_chunk_{chunk_idx:04d}",
                     "source": f"Discover The Wealth Within You - {chapter_title}",
@@ -81,7 +89,7 @@ if os.path.exists(epub_path):
                     "text": sc
                 })
                 chunk_idx += 1
-    print(f"Extracted {chunk_idx - 1} chunks from Ric Edelman Book.")
+    print(f"Extracted {chunk_idx - 1} financial chunks from Ric Edelman Book.")
 
 print("--- Step 2: Processing Global Personal Wealth Management MD Files ---")
 md_dir = os.path.join(WEALLTH_DIR, 'Research', 'Wealth AI Product Studio', 'Global Personal Wealth Management', 'MD Files')
@@ -143,7 +151,7 @@ if os.path.exists(docx_dir):
                 print(f"Error parsing DOCX {fname}: {e}")
     print(f"Extracted {docx_idx - 1} chunks from DOCX research files.")
 
-print(f"Total Chunks Generated: {len(chunks)}")
+print(f"Total Quality Chunks Generated: {len(chunks)}")
 
 os.makedirs(os.path.dirname(OUTPUT_FILE), exist_ok=True)
 with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:

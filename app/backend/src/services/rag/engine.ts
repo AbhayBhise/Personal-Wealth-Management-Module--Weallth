@@ -15,7 +15,7 @@ export class RAGEngine {
   }
 
   /**
-   * Performs Semantic Search across all 695 knowledge chunks.
+   * Performs Semantic Search across all quality knowledge chunks.
    */
   public async semanticSearch(query: string, categoryFilter?: string): Promise<DocumentChunk[]> {
     console.log(`[RAG ENGINE] Initiating semantic search for: "${query}" (Filter: ${categoryFilter || 'None'})`);
@@ -28,14 +28,19 @@ export class RAGEngine {
         filterLower.includes(c.metadata.category.toLowerCase())
       );
       if (candidates.length === 0) {
-        candidates = bookChunks; // fallback if category filter returns empty
+        candidates = bookChunks;
       }
     }
 
     // Tokenize query
     const queryTokens = query.toLowerCase().split(/\W+/).filter(t => t.length > 2);
 
-    // Score candidates based on Term Frequency & Position Matching
+    if (queryTokens.length === 0) {
+      // Return general wealth principles if query has no tokens > 2 chars
+      return candidates.slice(0, 3);
+    }
+
+    // Score candidates based on Term Frequency & Title Matching
     const scored = candidates.map(chunk => {
       const textTokens = chunk.text.toLowerCase().split(/\W+/);
       const titleTokens = (chunk.metadata.title || '').toLowerCase().split(/\W+/);
@@ -55,7 +60,7 @@ export class RAGEngine {
     // Return top 3 matching chunks
     const results = scored.filter(s => s.score > 0).map(s => s.chunk).slice(0, 3);
     
-    // Fallback: If no match, return candidate defaults
+    // Fallback: If no keyword match, return candidate defaults
     if (results.length === 0 && candidates.length > 0) {
       results.push(candidates[0]);
       if (candidates.length > 1) results.push(candidates[1]);
@@ -123,20 +128,41 @@ Provide a concise, advisory coaching response:`;
     const textSnippet = topChunk?.text || '';
 
     if (promptContext.includes("Goal Name") || promptContext.includes("shortfall")) {
-      return `We have analyzed your goal shortfall based on Ric Edelman's methodology [${sourceTitle}]: "${textSnippet.slice(0, 180)}..."
+      return `We have analyzed your goal shortfall based on Ric Edelman's methodology [${sourceTitle}]:
 
-According to Edelman principles, you cannot bridge a funding gap by wishing for higher returns. Please choose one of the three client-controlled mathematical levers calculated below (Option A: Increase Savings, Option B: Reduce Target Cost, Option C: Extend Target Date) to safely reach your goal.`;
+Key Principles:
+- When facing a goal funding shortfall, taking on higher market risk is counterproductive.
+- You have three mathematical levers under your control:
+  1. Option A: Increase your monthly savings rate.
+  2. Option B: Reduce your present-value goal cost target.
+  3. Option C: Extend your target timeline to allow more compounding time.`;
     } else if (promptContext.includes("Retirement") || promptContext.includes("longevity")) {
-      return `Based on Ric Edelman's retirement principles [${sourceTitle}]: "${textSnippet.slice(0, 200)}..."
+      return `Based on Ric Edelman's retirement planning principles [${sourceTitle}]:
 
-Key Advice:
-1. Longevity Risk: Plan for a retirement horizon to age 95 or 100.
-2. Withdrawal Sequence: Tap taxable accounts first, preserving tax-deferred IRAs/401(k)s for long-term growth.
-3. Principal Utilization: Controlled spending of principal in retirement is mathematically necessary and normal.`;
+Key Guidance:
+1. Longevity Risk: Plan for a retirement lifetime up to age 95 or 100 due to medical advancements.
+2. Withdrawal Sequence: Tap taxable brokerage accounts first, preserving tax-deferred IRAs/401(k)s and Roth accounts for long-term growth.
+3. Principal Spending: Gradual, controlled spending of principal in retirement is normal and mathematically expected.`;
+    } else if (promptContext.toLowerCase().includes("debt") || promptContext.toLowerCase().includes("credit card")) {
+      return `Based on Ric Edelman's debt management methodology [${sourceTitle}]:
+
+Core Advice:
+- High-interest consumer debt (>8% APR) is the single most destructive force in personal wealth accumulation.
+- Eliminating high-interest debt provides a guaranteed risk-free return equal to the interest rate.
+- Prioritize aggressive debt elimination before expanding growth investment allocations.`;
+    } else if (promptContext.toLowerCase().includes("emergency") || promptContext.toLowerCase().includes("cash")) {
+      return `Based on Ric Edelman's cash reserve guidelines [${sourceTitle}]:
+
+Core Advice:
+- Maintain 3 to 6 months of living expenses in liquid, high-yield cash accounts.
+- Your emergency fund is insurance to prevent forced selling of growth investments during income disruptions.`;
     } else {
-      return `Based on Ric Edelman's wealth management principles [${sourceTitle}]: "${textSnippet.slice(0, 220)}..."
+      return `Based on our wealth management research [${sourceTitle}]:
 
-Please follow these guidelines to optimize your portfolio and maintain long-term financial security.`;
+Key Insight:
+${textSnippet.slice(0, 240)}...
+
+How would you like to apply this to your current financial goals or portfolio setup?`;
     }
   }
 }
