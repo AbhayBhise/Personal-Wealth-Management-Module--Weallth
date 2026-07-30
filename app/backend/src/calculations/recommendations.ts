@@ -51,7 +51,7 @@ export function generateRecommendations(snapshot: FinancialSnapshot): Omit<Recom
     recs.push({
       category: 'Emergency Fund',
       priority: 'Critical',
-      alert_message: `Your emergency fund covers only ${efMonthsCovered.toFixed(1)} months of expenses. Your target is 6 months ($${snapshot.emergencyFundTarget.toLocaleString()}). You need $${gap.toLocaleString()} more.`,
+      alert_message: `Your emergency fund covers only ${efMonthsCovered.toFixed(1)} months of expenses. Your target is 6 months (₹${snapshot.emergencyFundTarget.toLocaleString()}). You need ₹${gap.toLocaleString()} more.`,
       reason: 'The Edelman methodology requires a minimum 3–6 month emergency buffer before allocating to growth assets. Without it, you risk liquidating long-term investments at a loss during income disruptions.',
       expected_benefit: 'Eliminates forced selling of growth assets during financial emergencies.',
       action: 'Open a high-yield savings account and automate monthly transfers until the emergency fund target is reached.',
@@ -72,9 +72,9 @@ export function generateRecommendations(snapshot: FinancialSnapshot): Omit<Recom
     recs.push({
       category: 'Debt Management',
       priority: 'Critical',
-      alert_message: `You are carrying $${snapshot.highInterestDebt.toLocaleString()} in high-interest debt at ${(snapshot.highInterestDebtRate * 100).toFixed(1)}% APR. This exceeds the 8% advisory threshold.`,
+      alert_message: `You are carrying ₹${snapshot.highInterestDebt.toLocaleString()} in high-interest debt at ${(snapshot.highInterestDebtRate * 100).toFixed(1)}% APR. This exceeds the 8% advisory threshold.`,
       reason: `A ${(snapshot.highInterestDebtRate * 100).toFixed(1)}% guaranteed "return" by eliminating debt always beats most market returns on a risk-adjusted basis. Edelman consistently prioritizes high-cost debt elimination before growth investing.`,
-      expected_benefit: `Eliminating this balance saves approximately $${Math.round(snapshot.highInterestDebt * snapshot.highInterestDebtRate).toLocaleString()} per year in interest charges.`,
+      expected_benefit: `Eliminating this balance saves approximately ₹${Math.round(snapshot.highInterestDebt * snapshot.highInterestDebtRate).toLocaleString()} per year in interest charges.`,
       action: 'Apply the Debt Avalanche strategy: redirect all discretionary savings to the highest-rate balance first, then cascade to the next.',
     });
   }
@@ -86,7 +86,7 @@ export function generateRecommendations(snapshot: FinancialSnapshot): Omit<Recom
       priority: 'High',
       alert_message: `Your current savings rate is ${Math.round(snapshot.savingsRate * 100)}%, below the Edelman-recommended minimum of 15% of net income.`,
       reason: 'Edelman advises that a consistent 15%+ savings rate is the single most important determinant of long-term financial health, outweighing investment returns for most households.',
-      expected_benefit: `Increasing to 15% would add $${Math.round((0.15 - snapshot.savingsRate) * snapshot.monthlyNetIncome).toLocaleString()} per month to your wealth-building capacity.`,
+      expected_benefit: `Increasing to 15% would add ₹${Math.round((0.15 - snapshot.savingsRate) * snapshot.monthlyNetIncome).toLocaleString()} per month to your wealth-building capacity.`,
       action: 'Automate a monthly transfer on payday to a dedicated investment or savings account to increase your savings rate incrementally.',
     });
   }
@@ -142,7 +142,7 @@ export function generateRecommendations(snapshot: FinancialSnapshot): Omit<Recom
       alert_message: `Your estate plan is missing: ${missingEstateDocs.join(', ')}.`,
       reason: 'Without these documents, your assets cannot be distributed per your wishes and your family may face costly probate. Edelman considers estate documents as foundational financial hygiene.',
       expected_benefit: 'Ensures your wishes are legally documented and avoids costly, time-consuming probate proceedings.',
-      action: 'Consult an estate attorney or use a reputable online legal service to draft the missing documents. Typical cost: $300–$1,500.',
+      action: 'Consult an estate attorney or use a reputable online legal service to draft the missing documents.',
     });
   }
 

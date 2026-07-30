@@ -36,6 +36,8 @@ model User {
   // Advisor relations
   advisorClients      AdvisorClientConsent[] @relation("advisor")
   clientAdvisors      AdvisorClientConsent[] @relation("client")
+  complianceLogsUser     ComplianceSuitabilityLog[] @relation("complianceUser")
+  complianceLogsAdvisor  ComplianceSuitabilityLog[] @relation("complianceAdvisor")
 
   @@map("users")
 }
@@ -46,7 +48,7 @@ model ClientProfile {
   userId          String   @id @map("user_id")
   age             Int
   riskProfile     String   @default("Balanced") @map("risk_profile")
-  displayCurrency String   @default("USD") @map("display_currency")
+  displayCurrency String   @default("INR") @map("display_currency")
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -242,3 +244,19 @@ model RecommendationAlert {
 
   @@map("recommendation_alerts")
 }
+
+model ComplianceSuitabilityLog {
+  id                   String   @id @default(uuid())
+  userId               String   @map("user_id")
+  advisorId            String   @map("advisor_id")
+  actionType           String   @map("action_type")
+  suitabilityRationale String   @map("suitability_rationale")
+  ipAddress            String   @map("ip_address")
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  user                 User     @relation("complianceUser", fields: [userId], references: [id], onDelete: Cascade)
+  advisor              User     @relation("complianceAdvisor", fields: [advisorId], references: [id], onDelete: Cascade)
+
+  @@map("compliance_suitability_logs")
+}
+

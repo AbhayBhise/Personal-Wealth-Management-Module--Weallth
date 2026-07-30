@@ -76,7 +76,7 @@ export const useAppStore = create<AppState>()(
   fetchDashboardData: async (userId: string) => {
     set({ isLoadingDashboard: true });
     try {
-      const headers = get().user?.token ? { Authorization: `Bearer ${get().user?.token}` } : {};
+      const headers: Record<string, string> = get().user?.token ? { Authorization: `Bearer ${get().user?.token}` } : {};
       const [whsRes, goalsRes, recsRes, nwRes] = await Promise.all([
         fetch(`${API_BASE}/users/${userId}/wealth-health-score`, { headers }),
         fetch(`${API_BASE}/users/${userId}/goals`, { headers }),
@@ -96,7 +96,7 @@ export const useAppStore = create<AppState>()(
   fetchPortfolioData: async (userId: string) => {
     set({ isLoadingPortfolio: true });
     try {
-      const headers = get().user?.token ? { Authorization: `Bearer ${get().user?.token}` } : {};
+      const headers: Record<string, string> = get().user?.token ? { Authorization: `Bearer ${get().user?.token}` } : {};
       const [summaryRes, perfRes, allocRes, rebalRes] = await Promise.all([
         fetch(`${API_BASE}/users/${userId}/portfolio/summary`, { headers }),
         fetch(`${API_BASE}/users/${userId}/portfolio/performance`, { headers }),
@@ -115,7 +115,7 @@ export const useAppStore = create<AppState>()(
 
   fetchAIRetirementCoach: async (userId: string) => {
     try {
-      const headers = get().user?.token ? { Authorization: `Bearer ${get().user?.token}` } : {};
+      const headers: Record<string, string> = get().user?.token ? { Authorization: `Bearer ${get().user?.token}` } : {};
       const res = await fetch(`${API_BASE}/users/${userId}/retirement-coach`, { headers });
       if (res.ok) {
         set({ aiRetirementCoachMessage: await res.json() });
@@ -167,7 +167,7 @@ export const useAppStore = create<AppState>()(
   },
 
   // ─── Currency State ───────────────────────────────────────────────────────
-  currency: 'USD',
+  currency: 'INR',
   setCurrency: async (currency: string) => {
     const { user } = get();
     set({ currency }); // Optimistic update

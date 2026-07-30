@@ -355,15 +355,15 @@ function Step2Income({ form, update }: any) {
       <div className="info-box">💡 Enter annual amounts. All income streams contribute to your Wealth Health Score.</div>
       <div className="form-grid-2">
         <FormField label="Salary / Employment Income (Annual)" required>
-          <input type="number" className="form-input" placeholder="$0" value={form.income.salary}
+          <input type="number" className="form-input" placeholder="₹0" value={form.income.salary}
             onChange={e => update(['income', 'salary'], e.target.value)} />
         </FormField>
         <FormField label="Business Income (Annual)">
-          <input type="number" className="form-input" placeholder="$0" value={form.income.business}
+          <input type="number" className="form-input" placeholder="₹0" value={form.income.business}
             onChange={e => update(['income', 'business'], e.target.value)} />
         </FormField>
         <FormField label="Rental Income (Annual)">
-          <input type="number" className="form-input" placeholder="$0" value={form.income.rental}
+          <input type="number" className="form-input" placeholder="₹0" value={form.income.rental}
             onChange={e => update(['income', 'rental'], e.target.value)} />
         </FormField>
         <FormField label="Other Income (Annual)">
@@ -376,7 +376,7 @@ function Step2Income({ form, update }: any) {
         return total > 0 ? (
           <div className="summary-card">
             <span>Total Annual Income</span>
-            <strong>${total.toLocaleString()}</strong>
+            <strong>₹{total.toLocaleString()}</strong>
           </div>
         ) : null;
       })()}
@@ -476,7 +476,7 @@ function Step3Assets({ form, setForm }: any) {
                       {HOLDING_CATEGORIES.map(c => <option key={c}>{c}</option>)}
                     </select>
                   </FormField>
-                  <FormField label="Current Value ($)">
+                  <FormField label="Current Value (₹)">
                     <input type="number" className="form-input" placeholder="0" value={h.current_value}
                       onChange={e => updateHolding(ai, hi, 'current_value', e.target.value)} />
                   </FormField>
@@ -503,7 +503,7 @@ function Step3Assets({ form, setForm }: any) {
       {totalAssets > 0 && (
         <div className="summary-card">
           <span>Total Assets Value</span>
-          <strong>${totalAssets.toLocaleString()}</strong>
+          <strong>₹{totalAssets.toLocaleString()}</strong>
         </div>
       )}
     </div>
@@ -551,7 +551,7 @@ function Step4Liabilities({ form, setForm }: any) {
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </FormField>
-            <FormField label="Outstanding Balance ($)">
+            <FormField label="Outstanding Balance (₹)">
               <input type="number" className="form-input" placeholder="0" value={l.outstanding_balance}
                 onChange={e => updateLiability(i, 'outstanding_balance', e.target.value)} />
             </FormField>
@@ -559,7 +559,7 @@ function Step4Liabilities({ form, setForm }: any) {
               <input type="number" className="form-input" placeholder="e.g. 18.5" value={l.interest_rate}
                 onChange={e => updateLiability(i, 'interest_rate', e.target.value)} />
             </FormField>
-            <FormField label="Monthly Payment ($)">
+            <FormField label="Monthly Payment (₹)">
               <input type="number" className="form-input" placeholder="0" value={l.monthly_payment}
                 onChange={e => updateLiability(i, 'monthly_payment', e.target.value)} />
             </FormField>
@@ -573,7 +573,7 @@ function Step4Liabilities({ form, setForm }: any) {
       {totalDebt > 0 && (
         <div className="summary-card" style={{ borderColor: 'rgba(230, 57, 70, 0.4)' }}>
           <span>Total Outstanding Debt</span>
-          <strong style={{ color: '#e63946' }}>${totalDebt.toLocaleString()}</strong>
+          <strong style={{ color: '#e63946' }}>₹{totalDebt.toLocaleString()}</strong>
         </div>
       )}
     </div>
@@ -619,7 +619,7 @@ function Step5Goals({ form, setForm }: any) {
                 {CATEGORIES.map(c => <option key={c}>{c}</option>)}
               </select>
             </FormField>
-            <FormField label="Target Amount ($)" required>
+            <FormField label="Target Amount (₹)" required>
               <input type="number" className="form-input" placeholder="0" value={g.target_amount}
                 onChange={e => updateGoal(i, 'target_amount', e.target.value)} />
             </FormField>
@@ -627,11 +627,11 @@ function Step5Goals({ form, setForm }: any) {
               <input type="number" className="form-input" placeholder={String(new Date().getFullYear() + 10)} value={g.target_year}
                 onChange={e => updateGoal(i, 'target_year', e.target.value)} />
             </FormField>
-            <FormField label="Already Saved ($)">
+            <FormField label="Already Saved (₹)">
               <input type="number" className="form-input" placeholder="0" value={g.already_saved}
                 onChange={e => updateGoal(i, 'already_saved', e.target.value)} />
             </FormField>
-            <FormField label="Monthly Contribution ($)">
+            <FormField label="Monthly Contribution (₹)">
               <input type="number" className="form-input" placeholder="0" value={g.monthly_contribution}
                 onChange={e => updateGoal(i, 'monthly_contribution', e.target.value)} />
             </FormField>
@@ -713,15 +713,15 @@ function Step7Insurance({ form, update }: any) {
         🛡️ Insurance is your wealth plan's safety net. Edelman considers it foundational before any growth investing.
       </div>
       <div className="form-grid-2">
-        <FormField label="Life Insurance Coverage ($)" hint="Total sum assured across all policies">
+        <FormField label="Life Insurance Coverage (₹)" hint="Total sum assured across all policies">
           <input type="number" className="form-input" placeholder="0" value={form.insurance.life_coverage}
             onChange={e => update(['insurance', 'life_coverage'], e.target.value)} />
         </FormField>
-        <FormField label="Health Insurance Coverage ($)" hint="Annual coverage limit">
+        <FormField label="Health Insurance Coverage (₹)" hint="Annual coverage limit">
           <input type="number" className="form-input" placeholder="0" value={form.insurance.health_coverage}
             onChange={e => update(['insurance', 'health_coverage'], e.target.value)} />
         </FormField>
-        <FormField label="Disability Coverage ($/month)" hint="Monthly benefit if you cannot work">
+        <FormField label="Disability Coverage (₹/month)" hint="Monthly benefit if you cannot work">
           <input type="number" className="form-input" placeholder="0" value={form.insurance.disability_coverage_monthly}
             onChange={e => update(['insurance', 'disability_coverage_monthly'], e.target.value)} />
         </FormField>
@@ -813,8 +813,8 @@ function FinancialSnapshotScreen({ snapshot, onContinue }: { snapshot: Financial
           <div style={{ fontSize: '1rem', fontWeight: 600, color: catColor, marginBottom: '1.5rem' }}>{whs.category}</div>
           <div className="form-grid-2" style={{ textAlign: 'left', gap: '0.75rem' }}>
             {[
-              { label: 'Net Worth', value: `$${(whs.net_worth ?? 0).toLocaleString()}` },
-              { label: 'Monthly Savings', value: `$${(whs.monthly_savings ?? 0).toLocaleString()}` },
+              { label: 'Net Worth', value: `₹${(whs.net_worth ?? 0).toLocaleString()}` },
+              { label: 'Monthly Savings', value: `₹${(whs.monthly_savings ?? 0).toLocaleString()}` },
               { label: 'Savings Rate', value: `${whs.savings_rate ?? 0}%` },
               { label: 'Emergency Fund', value: `${whs.emergency_fund_coverage ?? 0} months` },
               { label: 'Retirement Readiness', value: `${whs.retirement_readiness ?? 0}%` },

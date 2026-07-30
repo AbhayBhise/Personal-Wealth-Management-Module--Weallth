@@ -19,15 +19,14 @@ import { generateRecommendations } from '../calculations/recommendations';
 import { GoalCategory } from '../types';
 import { ragEngine } from './rag/engine';
 
-
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-for-demo';
 
 // ─── Auth Service ─────────────────────────────────────────────────────────────
-export function loginUser(email: string, password: string) {
-  const user = repo.findUserByEmail(email);
+export async function loginUser(email: string, password: string) {
+  const user = await repo.findUserByEmail(email);
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     return null;
   }
@@ -42,12 +41,12 @@ export function loginUser(email: string, password: string) {
   };
 }
 
-export function registerUser(email: string, password: string, name: string) {
-  const existing = repo.findUserByEmail(email);
+export async function registerUser(email: string, password: string, name: string) {
+  const existing = await repo.findUserByEmail(email);
   if (existing) throw new Error('User already exists');
 
   const password_hash = bcrypt.hashSync(password, 10);
-  const user = repo.createUser({
+  const user = await repo.createUser({
     email,
     password_hash,
     name,
@@ -67,10 +66,10 @@ export function registerUser(email: string, password: string, name: string) {
   };
 }
 
-export function updateUserPreferences(userId: string, preferences: { display_currency?: string }) {
-  const profile = repo.upsertClientProfile(userId, preferences);
+export async function updateUserPreferences(userId: string, preferences: { display_currency?: string }) {
+  const profile = await repo.upsertClientProfile(userId, preferences);
   return {
-    display_currency: profile.display_currency
+    display_currency: profile.display_currency,
   };
 }
 
@@ -142,26 +141,26 @@ export interface WealthDiscoveryPayload {
   consent_advisory_disclaimer: boolean;
 }
 
-export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPayload) {
+export async function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPayload) {
   // ── Step 1: Save household profile ─────────────────────────────────────────
   const dob = new Date(payload.dob);
   const age = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 
-  repo.upsertHouseholdProfile(userId, {
+  await repo.upsertHouseholdProfile(userId, {
     marital_status: payload.marital_status,
     occupation: payload.occupation,
   });
 
-  payload.dependents.forEach(d => {
-    repo.addHouseholdMember(userId, {
+  for (const d of payload.dependents) {
+    await repo.addHouseholdMember(userId, {
       relationship: d.relationship as any,
       name: d.name,
       dob: d.dob,
     });
-  });
+  }
 
   // ── Step 2: Save income profile ────────────────────────────────────────────
-  const incomeProfile = repo.upsertIncomeProfile(userId, payload.income);
+  const incomeProfile = await repo.upsertIncomeProfile(userId, payload.income);
   const annualIncome = (incomeProfile.salary + incomeProfile.business + incomeProfile.rental + incomeProfile.other);
   const monthlyNetIncome = annualIncome / 12;
   const hasDependents = payload.dependents.length > 0;
@@ -171,19 +170,19 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
   let liquidCash = 0;
 
   for (const acct of payload.accounts) {
-    const institution = repo.createInstitution(userId, {
+    const institution = await repo.createInstitution(userId, {
       name: acct.institution_name,
       type: acct.institution_type,
     });
 
-    const account = repo.createAccount(userId, {
+    const account = await repo.createAccount(userId, {
       institution_id: institution.id,
       name: acct.account_name,
       type: acct.account_type as any,
     });
 
     for (const h of acct.holdings) {
-      repo.createHolding(userId, {
+      await repo.createHolding(userId, {
         account_id: account.id,
         name: h.name,
         category: h.category as any,
@@ -202,7 +201,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
   let monthlyDebtPayments = 0;
 
   for (const l of payload.liabilities) {
-    repo.createLiability(userId, {
+    await repo.createLiability(userId, {
       name: l.name,
       category: l.category as any,
       outstanding_balance: l.outstanding_balance,
@@ -218,7 +217,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
   }
 
   // ── Step 5: Save goals (with shortfall calculation) ─────────────────────────
-  const assumptions = repo.getAssumptions(userId);
+  const assumptions = await repo.getAssumptions(userId);
   let goalsFunded = 0;
   let totalGoals = payload.goals.length;
 
@@ -236,7 +235,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
 
     if (shortfall <= 0) goalsFunded++;
 
-    repo.createGoal(userId, {
+    await repo.createGoal(userId, {
       name: g.name,
       category: g.category as GoalCategory,
       priority: g.priority as 'High' | 'Medium' | 'Low',
@@ -255,7 +254,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
   const riskProfile = scoreToRiskProfile(riskScore);
 
   // ── Step 7: Insurance ─────────────────────────────────────────────────────
-  const insurance = repo.upsertInsuranceProfile(userId, payload.insurance);
+  const insurance = await repo.upsertInsuranceProfile(userId, payload.insurance);
   const disabilityTarget = monthlyNetIncome * 0.60;
   const lifeTarget = (annualIncome * 10) + totalDebt;
   const disabilityCoverageRatio = insurance.disability_coverage_monthly / Math.max(1, disabilityTarget);
@@ -263,7 +262,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
 
   // ── Step 8: Derive segment & update user ──────────────────────────────────
   const segment = deriveWealthSegment(totalInvestableAssets, annualIncome);
-  repo.updateUser(userId, {
+  await repo.updateUser(userId, {
     onboarding_complete: true,
     segment,
   });
@@ -274,10 +273,10 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
   const savingsRate = monthlyNetIncome > 0 ? Math.max(0, monthlySavings / monthlyNetIncome) : 0;
   const jobVolatility = savingsRate > 0.20 ? 'low' : savingsRate > 0.10 ? 'medium' : 'high';
 
-  repo.upsertClientProfile(userId, {
+  await repo.upsertClientProfile(userId, {
     age,
     risk_profile: riskProfile,
-    display_currency: 'USD',
+    display_currency: 'INR',
   });
 
   // ── Calculate WHS ──────────────────────────────────────────────────────────
@@ -315,7 +314,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
   });
 
   const whsCategory = getWHSCategory(whsResult.score);
-  repo.appendWhsHistory(userId, whsResult.score, whsCategory);
+  await repo.appendWhsHistory(userId, whsResult.score, whsCategory);
 
   // ── Generate Recommendations ───────────────────────────────────────────────
   const generatedRecs = generateRecommendations({
@@ -338,7 +337,7 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
     hasHCProxy: payload.has_hc_proxy,
     hasEmergencyFundGoal: payload.goals.some(g => g.category === 'Emergency Fund'),
   });
-  repo.replaceRecommendations(userId, generatedRecs);
+  await repo.replaceRecommendations(userId, generatedRecs);
 
   // ── Return Financial Snapshot ─────────────────────────────────────────────
   return {
@@ -360,14 +359,14 @@ export function submitWealthDiscovery(userId: string, payload: WealthDiscoveryPa
 }
 
 // ─── WHS Service ──────────────────────────────────────────────────────────────
-export function getWHSSnapshot(userId: string) {
-  const profile = repo.getClientProfile(userId);
-  const userHoldings = repo.getHoldings(userId);
-  const userLiabilities = repo.getLiabilities(userId);
-  const incomeProfile = repo.getIncomeProfile(userId);
-  const insurance = repo.getInsuranceProfile(userId);
-  const assumptions = repo.getAssumptions(userId);
-  const userGoals = repo.getGoals(userId);
+export async function getWHSSnapshot(userId: string) {
+  const profile = await repo.getClientProfile(userId);
+  const userHoldings = await repo.getHoldings(userId);
+  const userLiabilities = await repo.getLiabilities(userId);
+  const incomeProfile = await repo.getIncomeProfile(userId);
+  const insurance = await repo.getInsuranceProfile(userId);
+  const assumptions = await repo.getAssumptions(userId);
+  const userGoals = await repo.getGoals(userId);
 
   if (!profile) return null;
 
@@ -383,7 +382,8 @@ export function getWHSSnapshot(userId: string) {
   const monthlyExpenses = monthlyNetIncome * 0.70;
   const monthlySavings = Math.max(0, monthlyNetIncome - monthlyExpenses - monthlyDebtPayments);
   const savingsRate = monthlyNetIncome > 0 ? monthlySavings / monthlyNetIncome : 0;
-  const hasDependents = repo.getHouseholdMembers(userId).length > 0;
+  const members = await repo.getHouseholdMembers(userId);
+  const hasDependents = members.length > 0;
   const jobVolatility = savingsRate > 0.20 ? 'low' : savingsRate > 0.10 ? 'medium' : 'high';
   const emergencyFundTarget = calculateEmergencyFundTarget(monthlyExpenses, jobVolatility, hasDependents);
 
@@ -408,8 +408,6 @@ export function getWHSSnapshot(userId: string) {
   const goalsOnTrack = userGoals.filter(g => g.shortfall <= 0).length;
   const goalFundingRatio = userGoals.length > 0 ? goalsOnTrack / userGoals.length : 1;
 
-  const household = repo.getHouseholdProfile(userId);
-
   const result = calculateWHS({
     liquidCashBalance: liquidCash,
     emergencyFundTarget,
@@ -427,7 +425,7 @@ export function getWHSSnapshot(userId: string) {
     lifeCoverageRatio,
     hasLTC: insurance?.has_long_term_care ?? false,
     age: profile.age,
-    hasWill: false,  // Retrieved from discovery payload stored on user if needed
+    hasWill: false,
     hasPOA: false,
     hasHCProxy: false,
   });
@@ -450,20 +448,20 @@ export function getWHSSnapshot(userId: string) {
 }
 
 // ─── Net Worth Service ────────────────────────────────────────────────────────
-export function getNetWorth(userId: string) {
+export async function getNetWorth(userId: string) {
   return repo.getNetWorthHistory(userId);
 }
 
 // ─── Goal Service ─────────────────────────────────────────────────────────────
-export function getGoals(userId: string) {
+export async function getGoals(userId: string) {
   return repo.getGoals(userId);
 }
 
-export function createGoal(userId: string, body: {
+export async function createGoal(userId: string, body: {
   name: string; category: GoalCategory; priority: 'High' | 'Medium' | 'Low';
   target_amount: number; target_year: number; already_saved: number; monthly_contribution: number;
 }) {
-  const assumptions = repo.getAssumptions(userId);
+  const assumptions = await repo.getAssumptions(userId);
   const years = yearsUntilYear(body.target_year);
   const inflationRate = body.category === 'Education' ? assumptions.education_inflation
     : body.category === 'Retirement' ? assumptions.retirement_inflation
@@ -478,10 +476,10 @@ export function createGoal(userId: string, body: {
   return repo.createGoal(userId, { ...body, shortfall: Math.round(shortfall) });
 }
 
-export function getGoalOptions(userId: string, goalId: string) {
-  const goal = repo.getGoalById(userId, goalId);
+export async function getGoalOptions(userId: string, goalId: string) {
+  const goal = await repo.getGoalById(userId, goalId);
   if (!goal || goal.shortfall <= 0) return null;
-  const assumptions = repo.getAssumptions(userId);
+  const assumptions = await repo.getAssumptions(userId);
   const years = yearsUntilYear(goal.target_year);
   const r = assumptions.expected_return;
   const inflationRate = goal.category === 'Education' ? assumptions.education_inflation
@@ -505,29 +503,30 @@ export function getGoalOptions(userId: string, goalId: string) {
   };
 }
 
-export function deleteGoal(userId: string, goalId: string) {
+export async function deleteGoal(userId: string, goalId: string) {
   return repo.deleteGoal(userId, goalId);
 }
 
 // ─── Recommendations ──────────────────────────────────────────────────────────
-export function getRecommendations(userId: string) {
+export async function getRecommendations(userId: string) {
   return repo.getRecommendations(userId);
 }
 
-export function updateRecommendation(userId: string, recId: string, status: 'Active' | 'Dismissed' | 'Snoozed' | 'Addressed') {
+export async function updateRecommendation(userId: string, recId: string, status: 'Active' | 'Dismissed' | 'Snoozed' | 'Addressed') {
   return repo.updateRecommendationStatus(userId, recId, status);
 }
 
 // ─── Assumptions ─────────────────────────────────────────────────────────────
-export function getAssumptions(userId: string) {
+export async function getAssumptions(userId: string) {
   return repo.getAssumptions(userId);
 }
 
 // ─── Advisor ──────────────────────────────────────────────────────────────────
-export function getAdvisorClients(advisorId: string) {
-  return repo.getAdvisorClients(advisorId).map(u => {
-    const profile = repo.getClientProfile(u.id);
-    const whs = getWHSSnapshot(u.id);
+export async function getAdvisorClients(advisorId: string) {
+  const clients = await repo.getAdvisorClients(advisorId);
+  return Promise.all(clients.map(async (u) => {
+    const profile = await repo.getClientProfile(u.id);
+    const whs = await getWHSSnapshot(u.id);
     return {
       id: u.id, name: u.name, email: u.email,
       whs_score: whs?.score ?? 0,
@@ -535,15 +534,11 @@ export function getAdvisorClients(advisorId: string) {
       segment: u.segment,
       age: profile?.age,
     };
-  });
+  }));
 }
 
 // ─── Investment Management Module (Phase 1) ───────────────────────────────────
 
-/**
- * Mock monthly return series for development (12 months).
- * In production these come from custodian API price history.
- */
 function getMockMonthlyReturns(seed: number): number[] {
   const returns: number[] = [];
   let prng = seed;
@@ -557,27 +552,22 @@ function getMockMonthlyReturns(seed: number): number[] {
 const BENCHMARK_MONTHLY_RETURNS = [
   0.015, -0.008, 0.022, 0.011, -0.012, 0.019,
   0.008, -0.005, 0.017, 0.021, -0.003, 0.014,
-]; // Simulated Nifty 50 / S&P monthly returns
+];
 
-const RISK_FREE_RATE_ANNUAL = 0.065; // 6.5% — India 10Y Govt Bond
+const RISK_FREE_RATE_ANNUAL = 0.065;
 
-/**
- * Portfolio Summary — aggregates all accounts and holdings for a user.
- * Returns total value, asset breakdown by institution, and key counts.
- */
-export function getPortfolioSummary(userId: string) {
-  const holdings = repo.getHoldings(userId);
-  const liabilities = repo.getLiabilities(userId);
-  const incomeProfile = repo.getIncomeProfile(userId);
-  const clientProfile = repo.getClientProfile(userId);
-  const accounts = repo.getAccounts(userId);
-  const institutions = repo.getInstitutions(userId);
+export async function getPortfolioSummary(userId: string) {
+  const holdings = await repo.getHoldings(userId);
+  const liabilities = await repo.getLiabilities(userId);
+  const incomeProfile = await repo.getIncomeProfile(userId);
+  const clientProfile = await repo.getClientProfile(userId);
+  const accounts = await repo.getAccounts(userId);
+  const institutions = await repo.getInstitutions(userId);
 
   const totalValue = holdings.reduce((s, h) => s + h.current_value, 0);
   const totalLiabilities = liabilities.reduce((s, l) => s + l.outstanding_balance, 0);
   const netWorth = totalValue - totalLiabilities;
 
-  // Group holdings by asset class
   const byAssetClass: Record<string, { value: number; count: number }> = {};
   for (const h of holdings) {
     if (!byAssetClass[h.category]) byAssetClass[h.category] = { value: 0, count: 0 };
@@ -585,7 +575,6 @@ export function getPortfolioSummary(userId: string) {
     byAssetClass[h.category].count += 1;
   }
 
-  // Group by institution
   const byInstitution = institutions.map(inst => {
     const instAccounts = accounts.filter(a => a.institution_id === inst.id);
     const instHoldings = holdings.filter(h => instAccounts.some(a => a.id === h.account_id));
@@ -615,7 +604,7 @@ export function getPortfolioSummary(userId: string) {
     by_asset_class: Object.entries(byAssetClass).map(([category, data]) => ({
       category,
       value: Math.round(data.value),
-      percentage: Math.round(allocationPercent[category] * 10000) / 100, // 2 decimal places
+      percentage: Math.round(allocationPercent[category] * 10000) / 100,
       count: data.count,
     })).sort((a, b) => b.value - a.value),
     by_institution: byInstitution,
@@ -623,21 +612,15 @@ export function getPortfolioSummary(userId: string) {
   };
 }
 
-/**
- * Portfolio Performance Analytics.
- * Calculates TWR, annualized return, volatility, Sharpe Ratio, Beta, Alpha vs benchmark.
- */
-export function getPortfolioPerformance(userId: string) {
-  const holdings = repo.getHoldings(userId);
-  const clientProfile = repo.getClientProfile(userId);
+export async function getPortfolioPerformance(userId: string) {
+  const holdings = await repo.getHoldings(userId);
+  const clientProfile = await repo.getClientProfile(userId);
   const totalValue = holdings.reduce((s, h) => s + h.current_value, 0);
 
-  // Generate mock monthly returns seeded from the user's portfolio value
   const seed = Math.abs(Math.round(totalValue)) || 12345;
   const monthlyReturns = getMockMonthlyReturns(seed);
 
-  // Build period objects for TWR
-  let runningValue = totalValue * 0.88; // approximate start-of-year value
+  let runningValue = totalValue * 0.88;
   const periods: PeriodReturn[] = monthlyReturns.map(r => {
     const startValue = runningValue;
     const endValue = startValue * (1 + r);
@@ -646,9 +629,8 @@ export function getPortfolioPerformance(userId: string) {
   });
 
   const twr = calculateTWR(periods);
-  const annualizedTWR = annualizeReturn(twr, 1); // already ~1 year of data
+  const annualizedTWR = annualizeReturn(twr, 1);
   const volatility = calculateVolatility(monthlyReturns, 12);
-  const rfMonthly = RISK_FREE_RATE_ANNUAL / 12;
   const sharpe = calculateSharpeRatio(annualizedTWR, RISK_FREE_RATE_ANNUAL, volatility);
   const beta = calculateBeta(monthlyReturns, BENCHMARK_MONTHLY_RETURNS);
   const benchmarkTWR = calculateTWR(
@@ -659,7 +641,6 @@ export function getPortfolioPerformance(userId: string) {
   );
   const alpha = calculateAlpha(annualizedTWR, annualizeReturn(benchmarkTWR, 1), RISK_FREE_RATE_ANNUAL, beta);
 
-  // Build monthly chart data
   let chartValue = totalValue * 0.88;
   let benchValue = totalValue * 0.88;
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -694,13 +675,9 @@ export function getPortfolioPerformance(userId: string) {
   };
 }
 
-/**
- * Asset Allocation — current vs target per risk profile.
- * Triggers rebalancing alerts when drift exceeds 5% threshold.
- */
-export function getAssetAllocation(userId: string) {
-  const holdings = repo.getHoldings(userId);
-  const clientProfile = repo.getClientProfile(userId);
+export async function getAssetAllocation(userId: string) {
+  const holdings = await repo.getHoldings(userId);
+  const clientProfile = await repo.getClientProfile(userId);
   const riskProfile = clientProfile?.risk_profile ?? 'Balanced';
 
   const currentAllocation = computeAssetAllocation(holdings);
@@ -724,18 +701,14 @@ export function getAssetAllocation(userId: string) {
     risk_profile: riskProfile,
     total_portfolio_value: Math.round(totalValue),
     total_drift_pct: Math.round(totalDrift * 10000) / 100,
-    needs_rebalance: totalDrift > 0.10, // >10% aggregate drift triggers alert
+    needs_rebalance: totalDrift > 0.10,
     breakdown,
     disclaimer: 'Target allocations are derived from Ric Edelman\'s portfolio methodology for your risk profile.',
   };
 }
 
-/**
- * Rebalancing Alerts — specific actions needed to restore target allocation.
- * Only fires when drift is material (>5% per asset class).
- */
-export function getRebalancingAlerts(userId: string) {
-  const allocation = getAssetAllocation(userId);
+export async function getRebalancingAlerts(userId: string) {
+  const allocation = await getAssetAllocation(userId);
   const alerts = allocation.breakdown
     .filter(b => b.needs_rebalance)
     .map(b => ({
@@ -763,28 +736,26 @@ export function getRebalancingAlerts(userId: string) {
 
 // ─── AI Coach Mock Services (Modules 1.1, 1.2, 1.3) ─────────────────────────
 
-export function getAIGoalCoachMessage(userId: string, goalId: string) {
-  const goal = repo.getGoalById(userId, goalId);
-  const options = getGoalOptions(userId, goalId);
+export async function getAIGoalCoachMessage(userId: string, goalId: string) {
+  const goal = await repo.getGoalById(userId, goalId);
+  const options = await getGoalOptions(userId, goalId);
   if (!goal || !options) return null;
 
-  // RAG Integration
   const retrievedChunks = ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goals");
   const promptContext = `Goal Name: ${goal.name}. Client needs to know options to fix shortfall.`;
   const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
 
   return {
     goal_id: goalId,
-    message: `${synthesizedBase}\n\nOption A: Increase monthly savings to $${options.option_a_required_monthly_savings.toLocaleString()}.\nOption B: Reduce target cost to $${options.option_b_supported_present_cost.toLocaleString()}.\nOption C: Delay target date by ${options.option_c_delay_months} months.`,
+    message: `${synthesizedBase}\n\nOption A: Increase monthly savings to ₹${options.option_a_required_monthly_savings.toLocaleString()}.\nOption B: Reduce target cost to ₹${options.option_b_supported_present_cost.toLocaleString()}.\nOption C: Delay target date by ${options.option_c_delay_months} months.`,
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
   };
 }
 
-export function getAIRetirementCoachMessage(userId: string) {
-  const profile = repo.getClientProfile(userId);
+export async function getAIRetirementCoachMessage(userId: string) {
+  const profile = await repo.getClientProfile(userId);
   const age = profile?.age ?? 40;
   
-  // RAG Integration
   const retrievedChunks = ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
   const promptContext = `Retirement Plan for Age ${age}. Explain longevity and withdrawals.`;
   const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
@@ -805,11 +776,11 @@ export function getAIRetirementCoachMessage(userId: string) {
   };
 }
 
-export function getAIRecommendationExplanation(userId: string, recId: string) {
-  const rec = repo.getRecommendations(userId).find(r => r.id === recId);
+export async function getAIRecommendationExplanation(userId: string, recId: string) {
+  const recs = await repo.getRecommendations(userId);
+  const rec = recs.find(r => r.id === recId);
   if (!rec) return null;
 
-  // RAG Integration
   const categoryFilter = rec.category === "Debt" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
   const retrievedChunks = ragEngine.semanticSearch(rec.category, categoryFilter);
   const promptContext = `Explain rule violation for ${rec.category}.`;
@@ -839,14 +810,12 @@ export function getAIRecommendationExplanation(userId: string, recId: string) {
   };
 }
 
-export function chatWithAdvisor(userId: string, message: string) {
-  const profile = repo.getClientProfile(userId);
+export async function chatWithAdvisor(userId: string, message: string) {
+  const profile = await repo.getClientProfile(userId);
   const context = `User Profile: Age ${profile?.age ?? 'Unknown'}. User Message: ${message}`;
   
-  // Retrieve relevant Edelman rules
   const retrievedChunks = ragEngine.semanticSearch(message);
   
-  // Synthesize response
   console.log(`[AI CHAT] Generating response for user ${userId}`);
   
   let responseText = "";
@@ -861,4 +830,3 @@ export function chatWithAdvisor(userId: string, message: string) {
     disclaimer: 'Advisory simulation only. Not financial advice.'
   };
 }
-

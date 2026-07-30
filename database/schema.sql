@@ -1,3 +1,4 @@
+-- SUPERSEDED BY app/backend/prisma/schema.prisma (Last Updated: 2026-07-30)
 -- ============================================================================
 -- WEALLTH PLATFORM - PERSONAL WEALTH MANAGEMENT SCHEMA
 -- PostgreSQL & Supabase Production DDL and Seed Data
@@ -83,7 +84,7 @@ CREATE TABLE assets (
     category asset_category_type NOT NULL,
     current_value DECIMAL(18,2) NOT NULL CHECK (current_value >= 0),
     is_liquid BOOLEAN NOT NULL DEFAULT FALSE,
-    currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+    currency VARCHAR(3) NOT NULL DEFAULT 'INR',
     last_updated TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

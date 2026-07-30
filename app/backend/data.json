@@ -60,25 +60,25 @@
       "user_id": "a1b2c3d4-0001-0001-0001-000000000001",
       "age": 34,
       "risk_profile": "Balanced",
-      "display_currency": "USD"
+      "display_currency": "INR"
     },
     {
       "user_id": "dd0942c3-319d-4860-aca8-719dfb2d5124",
       "age": 35,
       "risk_profile": "Balanced",
-      "display_currency": "USD"
+      "display_currency": "INR"
     },
     {
       "user_id": "fcd113de-8723-4daa-869d-2d0839277582",
       "age": 15,
       "risk_profile": "Balanced",
-      "display_currency": "USD"
+      "display_currency": "INR"
     },
     {
       "user_id": "7b8af50d-7402-4797-bed1-2816b52c4157",
       "age": 16,
       "risk_profile": "Growth",
-      "display_currency": "USD"
+      "display_currency": "INR"
     }
   ],
   "householdMembers": [],

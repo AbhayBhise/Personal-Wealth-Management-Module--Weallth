@@ -3,88 +3,92 @@
  * No business logic. No financial formulas.
  * Calls services, maps results to responses.
  */
-import { Request, Response } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import * as svc from '../services';
 
+// Wrapper for async Express route handlers to capture errors uniformly
+export function asyncHandler(fn: (req: Request, res: Response, next: NextFunction) => Promise<any>) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch((err) => {
+      console.error(`[HTTP ERROR ${req.method} ${req.path}]:`, err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error', detail: err?.message || String(err) });
+      }
+    });
+  };
+}
+
 // ─── Auth ──────────────────────────────────────────────────────────────────────
-export function login(req: Request, res: Response) {
+export const login = asyncHandler(async (req: Request, res: Response) => {
   const { email, password } = req.body;
   if (!email || !password) {
     return res.status(400).json({ error: 'Email and password are required.' });
   }
-  const user = svc.loginUser(email, password);
+  const user = await svc.loginUser(email, password);
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials.' });
   }
   return res.status(200).json(user);
-}
+});
 
-export function register(req: Request, res: Response) {
+export const register = asyncHandler(async (req: Request, res: Response) => {
   const { email, password, name } = req.body;
   if (!email || !password || !name) {
     return res.status(400).json({ error: 'Email, password, and name are required.' });
   }
   try {
-    const user = svc.registerUser(email, password, name);
+    const user = await svc.registerUser(email, password, name);
     return res.status(201).json(user);
   } catch (err: any) {
     return res.status(400).json({ error: err.message });
   }
-}
+});
 
-export function patchUserPreferences(req: Request, res: Response) {
-  try {
-    const { userId } = req.params;
-    const { display_currency } = req.body;
-    const result = svc.updateUserPreferences(userId, { display_currency });
-    return res.status(200).json(result);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to update preferences', detail: err.message });
-  }
-}
+export const patchUserPreferences = asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { display_currency } = req.body;
+  const result = await svc.updateUserPreferences(userId, { display_currency });
+  return res.status(200).json(result);
+});
 
 // ─── Risk Questions ────────────────────────────────────────────────────────────
-export function getRiskQuestions(_req: Request, res: Response) {
+export const getRiskQuestions = asyncHandler(async (_req: Request, res: Response) => {
   return res.status(200).json(svc.getRiskQuestions());
-}
+});
 
 // ─── Wealth Discovery ──────────────────────────────────────────────────────────
-export function submitWealthDiscovery(req: Request, res: Response) {
+export const submitWealthDiscovery = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
-  try {
-    const snapshot = svc.submitWealthDiscovery(userId, req.body);
-    return res.status(200).json(snapshot);
-  } catch (err: any) {
-    console.error('WealthDiscovery error:', err);
-    return res.status(500).json({ error: 'Failed to process wealth discovery.', detail: err.message });
-  }
-}
+  const snapshot = await svc.submitWealthDiscovery(userId, req.body);
+  return res.status(200).json(snapshot);
+});
 
 // ─── WHS ───────────────────────────────────────────────────────────────────────
-export function getWHSSnapshot(req: Request, res: Response) {
-  const snapshot = svc.getWHSSnapshot(req.params.userId);
+export const getWHSSnapshot = asyncHandler(async (req: Request, res: Response) => {
+  const snapshot = await svc.getWHSSnapshot(req.params.userId);
   if (!snapshot) return res.status(404).json({ error: 'Profile not found.' });
   return res.status(200).json(snapshot);
-}
+});
 
 // ─── Net Worth ─────────────────────────────────────────────────────────────────
-export function getNetWorth(req: Request, res: Response) {
-  const data = svc.getNetWorth(req.params.userId);
+export const getNetWorth = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getNetWorth(req.params.userId);
   return res.status(200).json(data);
-}
+});
 
 // ─── Goals ─────────────────────────────────────────────────────────────────────
-export function getGoals(req: Request, res: Response) {
-  return res.status(200).json(svc.getGoals(req.params.userId));
-}
+export const getGoals = asyncHandler(async (req: Request, res: Response) => {
+  const goals = await svc.getGoals(req.params.userId);
+  return res.status(200).json(goals);
+});
 
-export function createGoal(req: Request, res: Response) {
+export const createGoal = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
   const { name, category, priority, target_amount, target_year, already_saved, monthly_contribution } = req.body;
   if (!name || !category || !target_amount || !target_year) {
     return res.status(400).json({ error: 'name, category, target_amount, and target_year are required.' });
   }
-  const goal = svc.createGoal(userId, {
+  const goal = await svc.createGoal(userId, {
     name, category, priority: priority ?? 'Medium',
     target_amount: Number(target_amount),
     target_year: Number(target_year),
@@ -92,124 +96,95 @@ export function createGoal(req: Request, res: Response) {
     monthly_contribution: Number(monthly_contribution ?? 0),
   });
   return res.status(201).json(goal);
-}
+});
 
-export function getGoalOptions(req: Request, res: Response) {
+export const getGoalOptions = asyncHandler(async (req: Request, res: Response) => {
   const { userId, goalId } = req.params;
-  const options = svc.getGoalOptions(userId, goalId);
+  const options = await svc.getGoalOptions(userId, goalId);
   if (!options) return res.status(404).json({ error: 'Goal not found or has no shortfall.' });
   return res.status(200).json(options);
-}
+});
 
-export function deleteGoal(req: Request, res: Response) {
+export const deleteGoal = asyncHandler(async (req: Request, res: Response) => {
   const { userId, goalId } = req.params;
-  const success = svc.deleteGoal(userId, goalId);
+  const success = await svc.deleteGoal(userId, goalId);
   if (!success) return res.status(404).json({ error: 'Goal not found.' });
   return res.status(204).send();
-}
+});
 
 // ─── Recommendations ───────────────────────────────────────────────────────────
-export function getRecommendations(req: Request, res: Response) {
-  return res.status(200).json(svc.getRecommendations(req.params.userId));
-}
+export const getRecommendations = asyncHandler(async (req: Request, res: Response) => {
+  const recs = await svc.getRecommendations(req.params.userId);
+  return res.status(200).json(recs);
+});
 
-export function updateRecommendation(req: Request, res: Response) {
+export const updateRecommendation = asyncHandler(async (req: Request, res: Response) => {
   const { userId, recId } = req.params;
   const { status } = req.body;
-  const result = svc.updateRecommendation(userId, recId, status);
+  const result = await svc.updateRecommendation(userId, recId, status);
   if (!result) return res.status(404).json({ error: 'Recommendation not found.' });
   return res.status(200).json(result);
-}
+});
 
 // ─── Assumptions ───────────────────────────────────────────────────────────────
-export function getAssumptions(req: Request, res: Response) {
-  return res.status(200).json(svc.getAssumptions(req.params.userId));
-}
+export const getAssumptions = asyncHandler(async (req: Request, res: Response) => {
+  const assumptions = await svc.getAssumptions(req.params.userId);
+  return res.status(200).json(assumptions);
+});
 
 // ─── Advisor ───────────────────────────────────────────────────────────────────
-export function getAdvisorClients(req: Request, res: Response) {
-  return res.status(200).json(svc.getAdvisorClients(req.params.advisorId));
-}
+export const getAdvisorClients = asyncHandler(async (req: Request, res: Response) => {
+  const clients = await svc.getAdvisorClients(req.params.advisorId);
+  return res.status(200).json(clients);
+});
 
 // ─── Investment Management Module (Phase 1) ────────────────────────────────────
 
-export function getPortfolioSummary(req: Request, res: Response) {
-  try {
-    const data = svc.getPortfolioSummary(req.params.userId);
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve portfolio summary.', detail: err.message });
-  }
-}
+export const getPortfolioSummary = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getPortfolioSummary(req.params.userId);
+  return res.status(200).json(data);
+});
 
-export function getPortfolioPerformance(req: Request, res: Response) {
-  try {
-    const data = svc.getPortfolioPerformance(req.params.userId);
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to calculate portfolio performance.', detail: err.message });
-  }
-}
+export const getPortfolioPerformance = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getPortfolioPerformance(req.params.userId);
+  return res.status(200).json(data);
+});
 
-export function getAssetAllocation(req: Request, res: Response) {
-  try {
-    const data = svc.getAssetAllocation(req.params.userId);
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve asset allocation.', detail: err.message });
-  }
-}
+export const getAssetAllocation = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getAssetAllocation(req.params.userId);
+  return res.status(200).json(data);
+});
 
-export function getRebalancingAlerts(req: Request, res: Response) {
-  try {
-    const data = svc.getRebalancingAlerts(req.params.userId);
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve rebalancing alerts.', detail: err.message });
-  }
-}
+export const getRebalancingAlerts = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getRebalancingAlerts(req.params.userId);
+  return res.status(200).json(data);
+});
 
 // ─── AI Mock Services (Modules 1.1, 1.2, 1.3) ──────────────────────────────────
 
-export function getAIGoalCoachMessage(req: Request, res: Response) {
-  try {
-    const data = svc.getAIGoalCoachMessage(req.params.userId, req.params.goalId);
-    if (!data) return res.status(404).json({ error: 'Goal or shortfall not found.' });
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve AI Goal Coach message.', detail: err.message });
-  }
-}
+export const getAIGoalCoachMessage = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getAIGoalCoachMessage(req.params.userId, req.params.goalId);
+  if (!data) return res.status(404).json({ error: 'Goal or shortfall not found.' });
+  return res.status(200).json(data);
+});
 
-export function getAIRetirementCoachMessage(req: Request, res: Response) {
-  try {
-    const data = svc.getAIRetirementCoachMessage(req.params.userId);
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve AI Retirement Coach message.', detail: err.message });
-  }
-}
+export const getAIRetirementCoachMessage = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getAIRetirementCoachMessage(req.params.userId);
+  return res.status(200).json(data);
+});
 
-export function getAIRecommendationExplanation(req: Request, res: Response) {
-  try {
-    const data = svc.getAIRecommendationExplanation(req.params.userId, req.params.recId);
-    if (!data) return res.status(404).json({ error: 'Recommendation not found.' });
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to retrieve AI Recommendation Explanation.', detail: err.message });
-  }
-}
+export const getAIRecommendationExplanation = asyncHandler(async (req: Request, res: Response) => {
+  const data = await svc.getAIRecommendationExplanation(req.params.userId, req.params.recId);
+  if (!data) return res.status(404).json({ error: 'Recommendation not found.' });
+  return res.status(200).json(data);
+});
 
-export function postAIChat(req: Request, res: Response) {
-  try {
-    const { userId } = req.params;
-    const { message } = req.body;
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required.' });
-    }
-    const data = svc.chatWithAdvisor(userId, message);
-    return res.status(200).json(data);
-  } catch (err: any) {
-    return res.status(500).json({ error: 'Failed to process AI chat.', detail: err.message });
+export const postAIChat = asyncHandler(async (req: Request, res: Response) => {
+  const { userId } = req.params;
+  const { message } = req.body;
+  if (!message) {
+    return res.status(400).json({ error: 'Message is required.' });
   }
-}
+  const data = await svc.chatWithAdvisor(userId, message);
+  return res.status(200).json(data);
+});

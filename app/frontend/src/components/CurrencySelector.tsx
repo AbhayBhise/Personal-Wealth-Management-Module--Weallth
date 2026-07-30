@@ -2,10 +2,10 @@ import React from 'react';
 import { useAppStore } from '../store/useAppStore';
 
 const CURRENCIES = [
+  { code: 'INR', label: 'INR (₹)' },
   { code: 'USD', label: 'USD ($)' },
   { code: 'EUR', label: 'EUR (€)' },
   { code: 'GBP', label: 'GBP (£)' },
-  { code: 'INR', label: 'INR (₹)' },
   { code: 'JPY', label: 'JPY (¥)' },
   { code: 'AUD', label: 'AUD ($)' },
   { code: 'CAD', label: 'CAD ($)' },

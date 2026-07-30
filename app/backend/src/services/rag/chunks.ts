@@ -11,7 +11,7 @@ export const bookChunks: DocumentChunk[] = [
   {
     id: "chunk_001_debt",
     metadata: { category: "Debt", source: "Discover The Wealth Within You - Chapter 4" },
-    text: "Credit card debt is the single most destructive force in personal finance. Because of compounding interest, a $5,000 balance at 19% interest will cost you thousands in interest and take years to pay off if you only make the minimum payment. The absolute first priority for any wealth-building plan is to aggressively pay down high-interest debt, because no investment will reliably return more than what the credit card company is charging you."
+    text: "Credit card debt is the single most destructive force in personal finance. Because of compounding interest, a ₹50,000 balance at 19% interest will cost you thousands in interest and take years to pay off if you only make the minimum payment. The absolute first priority for any wealth-building plan is to aggressively pay down high-interest debt, because no investment will reliably return more than what the credit card company is charging you."
   },
   {
     id: "chunk_002_emergency",
