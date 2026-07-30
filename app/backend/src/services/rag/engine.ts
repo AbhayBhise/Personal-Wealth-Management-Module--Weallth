@@ -15,7 +15,7 @@ export class RAGEngine {
   }
 
   /**
-   * Performs Semantic Vector Search across all 695 knowledge chunks.
+   * Performs Semantic Search across all 695 knowledge chunks.
    */
   public async semanticSearch(query: string, categoryFilter?: string): Promise<DocumentChunk[]> {
     console.log(`[RAG ENGINE] Initiating semantic search for: "${query}" (Filter: ${categoryFilter || 'None'})`);
@@ -66,7 +66,7 @@ export class RAGEngine {
   }
 
   /**
-   * Generates AI Coach response using Google Gemini API (or local fallback).
+   * Generates AI Coach response using Google Gemini API (gemini-2.0-flash) with local fallback.
    */
   public async generateResponse(promptContext: string, retrievedChunks: DocumentChunk[]): Promise<string> {
     const contextText = retrievedChunks.map((c, i) => 
@@ -76,11 +76,13 @@ export class RAGEngine {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (this.genAI && apiKey && apiKey.trim().length > 0) {
-      try {
-        console.log(`[RAG ENGINE] Calling Gemini API (gemini-1.5-flash) with RAG context...`);
-        const model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const modelNames = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+      for (const modelName of modelNames) {
+        try {
+          console.log(`[RAG ENGINE] Calling Gemini API (${modelName}) with RAG context...`);
+          const model = this.genAI.getGenerativeModel({ model: modelName });
 
-        const systemInstruction = `
+          const systemInstruction = `
 You are Weallth's Advisory Wealth Coach. You guide clients using principles from Ric Edelman's 'Discover The Wealth Within You' and 'Global Personal Wealth Management Research'.
 
 CRITICAL GUARDRAILS & INSTRUCTIONS:
@@ -91,7 +93,7 @@ CRITICAL GUARDRAILS & INSTRUCTIONS:
 5. Keep your tone empathetic, clear, professional, and actionable (100–180 words).
 `;
 
-        const fullPrompt = `${systemInstruction}
+          const fullPrompt = `${systemInstruction}
 
 RAG KNOWLEDGE CONTEXT CHUNKS:
 ${contextText}
@@ -101,15 +103,16 @@ ${promptContext}
 
 Provide a concise, advisory coaching response:`;
 
-        const result = await model.generateContent(fullPrompt);
-        const responseText = result.response.text();
+          const result = await model.generateContent(fullPrompt);
+          const responseText = result.response.text();
 
-        if (responseText && responseText.trim().length > 0) {
-          console.log('[RAG ENGINE] Gemini API response generated successfully.');
-          return responseText.trim();
+          if (responseText && responseText.trim().length > 0) {
+            console.log(`[RAG ENGINE] Gemini API (${modelName}) response generated successfully.`);
+            return responseText.trim();
+          }
+        } catch (err: any) {
+          console.warn(`[RAG ENGINE] Gemini API (${modelName}) note: ${err?.message || err}`);
         }
-      } catch (err: any) {
-        console.error('[RAG ENGINE] Gemini API call error, falling back to local synthesis:', err?.message || err);
       }
     }
 
