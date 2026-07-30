@@ -1,0 +1,725 @@
+# COMPREHENSIVE WEALTH MANAGEMENT PLATFORM
+## Detailed Production Support Document (DPS)
+### Operational Support, SLAs & Incident Response
+
+---
+
+## EXECUTIVE SUMMARY
+
+This document defines production support operations including service level agreements (SLAs), on-call procedures, incident response protocols, monitoring & alerting, and operational best practices.
+
+**Document Version:** 1.0  
+**Date:** January 24, 2026
+
+---
+
+## 1. SERVICE LEVEL AGREEMENTS (SLAs)
+
+### 1.1 Platform SLAs
+
+**Availability:**
+```
+Production SLA: 99.99% (52.6 minutes downtime per year)
+  - Measured over 30-day rolling period
+  - Excludes scheduled maintenance
+  - Excludes client-side issues
+  - Excludes third-party service failures
+
+Measurement Points:
+  - API Gateway: Core health check endpoint
+  - Database: Read/write connectivity
+  - Custodian integrations: Account data availability
+  - Client portal: Web accessibility
+  
+Calculation:
+  Availability = (Total minutes - Downtime) / Total minutes
+```
+
+**Performance SLAs:**
+```
+API Response Times (p95):
+  - Authentication: < 200ms
+  - Portfolio queries: < 500ms
+  - Report generation: < 30 seconds (for generation)
+  - Dashboard load: < 2 seconds
+  
+Database Queries:
+  - Simple queries: < 50ms
+  - Complex queries: < 500ms
+  - Aggregate queries: < 5 seconds
+
+Page Load Times:
+  - Dashboard: < 2 seconds (first load)
+  - Dashboard: < 1 second (subsequent loads, cached)
+  - Client portal: < 3 seconds
+  - Mobile app: < 2 seconds
+```
+
+**Support Response Times:**
+```
+Severity 1 (Critical - System Down):
+  - Initial Response: 15 minutes
+  - Resolution Target: 4 hours
+  - Example: API completely unavailable
+  
+Severity 2 (Major - Degraded Performance):
+  - Initial Response: 1 hour
+  - Resolution Target: 8 hours
+  - Example: API latency > 2 seconds, 50% of trades failing
+  
+Severity 3 (Minor - Limited Impact):
+  - Initial Response: 4 hours
+  - Resolution Target: 24 hours
+  - Example: Specific report type not generating
+  
+Severity 4 (Low - Cosmetic/Documentation):
+  - Initial Response: 24 hours
+  - Resolution Target: 5 business days
+  - Example: UI label misalignment, outdated help text
+```
+
+**SLA Remedies:**
+```
+If SLA missed for Severity 1:
+  - Service credit: 10% of monthly fee
+  - Cap: Maximum 30% credit per month
+
+If SLA missed for Severity 2:
+  - Service credit: 5% of monthly fee
+  - Cap: Maximum 15% credit per month
+
+If SLA missed for Severity 3+:
+  - No automatic credit
+  - Good faith effort documented
+```
+
+---
+
+## 2. ON-CALL OPERATIONS
+
+### 2.1 On-Call Schedule
+
+**On-Call Team Structure:**
+```
+Primary On-Call (Tier 1):
+  - Rotation: Weekly
+  - Role: Incident triage & escalation
+  - Response time: 15 minutes
+
+Secondary On-Call (Tier 2):
+  - Rotation: Weekly
+  - Role: Technical deep-dive & resolution
+  - Response time: 30 minutes
+
+Manager On-Call (Tier 3):
+  - Rotation: Monthly
+  - Role: Executive decision making
+  - Response time: 1 hour
+```
+
+**On-Call Contact Methods:**
+```
+Primary: PagerDuty push notification (required)
+Secondary: SMS (required)
+Tertiary: Phone call (automated)
+Fallback: Escalation to manager
+
+Response Expectation:
+  - Acknowledge alert within 5 minutes
+  - Begin investigation within 15 minutes
+  - Update status every 30 minutes
+```
+
+**On-Call Escalation Policy:**
+```
+Alert triggered → Tier 1 on-call engineer
+  If no response in 5 minutes → SMS alert
+  If no response in 10 minutes → Phone call
+  If no response in 15 minutes → Escalate to Tier 2
+  
+Tier 2 begins investigation
+  For critical issues needing business decision → Escalate to Tier 3
+  For standard issues → Tier 2 leads resolution
+```
+
+### 2.2 Incident Management
+
+**Incident Severity Classification:**
+
+| Severity | Impact | Users Affected | Response | Resolution |
+|----------|--------|----------------|----------|-----------|
+| **1 - Critical** | System down/unusable | All | 15 min | 4 hrs |
+| **2 - High** | Major degradation | >50% | 1 hour | 8 hrs |
+| **3 - Medium** | Noticeable degradation | <50% | 4 hrs | 24 hrs |
+| **4 - Low** | Minimal impact | <10% | 24 hrs | 5 days |
+
+**Incident Response Process:**
+
+```
+1. Detection (0 min)
+   ↓ Alert triggered by monitoring
+   ↓ PagerDuty notifies on-call engineer
+   
+2. Acknowledgment (0-5 min)
+   ↓ On-call engineer acknowledges alert
+   ↓ Incident created in PagerDuty
+   ↓ Slack channel #incident-response created
+   
+3. Investigation (5-30 min)
+   ↓ Gather facts
+   ↓ Determine severity
+   ↓ Identify affected services
+   ↓ Look for recent changes
+   
+4. Communication (starts at 5 min)
+   ↓ Update internal team every 15 minutes
+   ↓ Update customer (if customer-visible) every 30 minutes
+   
+5. Mitigation (varies)
+   ↓ For Sev 1: Begin mitigation immediately (no approval needed)
+   ↓ For Sev 2+: Determine best approach (rollback vs. hotfix vs. restart)
+   ↓ Execute mitigation
+   ↓ Verify resolution
+   
+6. Resolution (when issue fixed)
+   ↓ Notify customer
+   ↓ Monitor for stability (30 minutes)
+   ↓ Create post-mortem task
+   
+7. Post-Mortem (within 48 hours)
+   ↓ Root cause analysis
+   ↓ Timeline of events
+   ↓ Action items to prevent recurrence
+   ↓ Document and share learnings
+```
+
+**Incident Communication Template:**
+```
+Initial Notification (Tier 1 → Team):
+"Incident declared: [Severity] [System]
+Description: [Brief description]
+Affected: [Services/Users affected]
+Status: [Investigating/Mitigating/Resolved]
+ETA: [Time estimate]
+Ticket: [Link to tracking system]"
+
+Update (Every 15-30 minutes):
+"Update - [Time since incident start]
+Status: [Current status]
+Actions taken: [What we've done]
+Current focus: [What we're working on now]
+Next update: [In X minutes]"
+
+Resolution:
+"Incident resolved
+Duration: [Total time]
+Root cause: [Brief description]
+Impact: [Actual impact]
+Action items: [Created for follow-up]"
+```
+
+---
+
+## 3. MONITORING & ALERTING
+
+### 3.1 Monitoring Stack
+
+**Metrics Collection:**
+```
+Infrastructure Metrics (CloudWatch):
+  - CPU utilization per instance
+  - Memory utilization per instance
+  - Disk utilization per instance
+  - Network I/O per instance
+  - EBS volume metrics
+  - RDS database metrics
+  - Load balancer metrics
+
+Application Metrics (Prometheus):
+  - API request count (by endpoint)
+  - API latency (histogram: p50, p95, p99)
+  - Error rates (by endpoint, status code)
+  - Database query latency
+  - Cache hit rate
+  - Message queue depth
+  - Background job duration
+
+Business Metrics (Custom):
+  - Users logged in (real-time)
+  - Trades executed (per minute)
+  - Reports generated (per day)
+  - New clients created (per day)
+  - AUM managed (aggregate)
+```
+
+**Logging Stack:**
+```
+Log Aggregation: ELK Stack (Elasticsearch, Logstash, Kibana)
+
+Log Sources:
+  - Application logs: All services
+  - Database logs: Query logs, connection logs
+  - Web server logs: Apache/Nginx
+  - Audit logs: User activities
+  - Infrastructure logs: Kubernetes events
+
+Log Retention:
+  - Hot storage (searchable): 30 days
+  - Warm storage (indexed): 90 days
+  - Cold storage (archive): 7 years
+
+Search Examples:
+  - Find all errors for user X: "userId: usr_123 level: ERROR"
+  - Find slow queries: "duration > 5000"
+  - Find failed trades: "action: execute_trade status: FAILED"
+```
+
+### 3.2 Alerting Rules
+
+**Critical Alerts (Page immediately):**
+```
+1. API Error Rate > 1%
+   Threshold: If error rate > 1% for 2 consecutive minutes
+   Action: Trigger Sev 1, page on-call
+   
+2. API Latency p95 > 2 seconds
+   Threshold: If p95 latency > 2s for 5 consecutive minutes
+   Action: Trigger Sev 1, page on-call
+   
+3. Database CPU > 90%
+   Threshold: If CPU usage > 90% for 2 minutes
+   Action: Trigger Sev 1, page on-call
+   
+4. Database Connection Count > 350 (of 400)
+   Threshold: If connections > 350
+   Action: Trigger Sev 1, page on-call
+   
+5. Service Pod Crashes > 3 in 5 minutes
+   Threshold: If CrashLoopBackOff occurs 3+ times
+   Action: Trigger Sev 1, page on-call
+   
+6. Disk Usage > 85% on Data Volume
+   Threshold: If disk usage > 85%
+   Action: Trigger Sev 2, alert team
+   
+7. Cache Unavailable
+   Threshold: Any unreachable Redis node
+   Action: Trigger Sev 1, page on-call
+   
+8. Custodian API Unavailable
+   Threshold: 3 consecutive failed API calls (timeout)
+   Action: Trigger Sev 2, alert team
+```
+
+**High Priority Alerts (Alert via Slack + Email):**
+```
+1. New Deployment Error > 5%
+   - Indicates rollback-worthy issue
+   - Auto-rollback may trigger
+   
+2. Database Replication Lag > 10 seconds
+   - Indicates potential data consistency issue
+   
+3. Message Queue Backlog > 1 hour
+   - Indicates processing bottleneck
+```
+
+**Information Alerts (Slack only, no page):**
+```
+1. Daily backup completion
+2. Log rotation completion
+3. Security scan results
+4. Performance trend changes
+```
+
+### 3.3 Dashboard Examples
+
+**Executive Dashboard:**
+```
+Service Status:
+  ✓ API Gateway: Green (100% uptime)
+  ✓ Database: Green (99.99% available)
+  ✓ Custodian APIs: Green (98.5% available)
+
+Key Metrics:
+  - Uptime: 99.99% (this month)
+  - Users Online: 287
+  - Trades Today: 1,234
+  - API Latency (p95): 145ms
+  - Error Rate: 0.02%
+
+Incidents (Last 7 days):
+  - 1 Sev 2 incident (custodian API timeout)
+  - 0 Sev 1 incidents
+  - MTTR: 12 minutes
+```
+
+**Engineering Dashboard:**
+```
+API Endpoints Performance (Last hour):
+  GET  /api/v1/portfolio/accounts: 45ms (p95), 120k requests
+  POST /api/v1/portfolio/trade: 290ms (p95), 5k requests
+  GET  /api/v1/reports/{id}: 1.2s (p95), 800 requests
+
+Database Performance:
+  Connections: 186 of 400
+  Replication Lag: 0.1s
+  Slowest Query: 2.3s (audit_log cleanup)
+
+System Health:
+  CPU: 45% average
+  Memory: 62% average
+  Disk: 52% used
+  Network: 45 Mbps average
+```
+
+---
+
+## 4. INCIDENT RESPONSE PROCEDURES
+
+### 4.1 Common Incident Scenarios
+
+**Scenario 1: API Service Crash**
+
+```
+Symptom: Multiple error alerts, API latency spike
+
+Investigation:
+  1. Check Kubernetes pod status
+     kubectl get pods -n production | grep api-gateway
+  
+  2. Check pod logs
+     kubectl logs -n production deployment/api-gateway --tail=100
+  
+  3. Check resource usage
+     kubectl top pods -n production -l app=api-gateway
+  
+  4. Check recent deployments
+     kubectl rollout history deployment/api-gateway
+
+Possible Causes:
+  a) Out of memory: Pod killed due to memory limit
+     Fix: Increase memory limit, restart pods
+  
+  b) Crash loop: Application crashing on startup
+     Fix: Rollback to previous version
+  
+  c) Dependency unavailable: Database/cache unreachable
+     Fix: Restart dependent services first
+
+Resolution:
+  kubectl rollout undo deployment/api-gateway
+  kubectl rollout status deployment/api-gateway
+```
+
+**Scenario 2: High Database Latency**
+
+```
+Symptom: API latency increases, database queries slow
+
+Investigation:
+  1. Check active queries
+     SELECT * FROM pg_stat_activity WHERE state = 'active';
+  
+  2. Check query locks
+     SELECT * FROM pg_locks WHERE mode != 'AccessShareLock';
+  
+  3. Check disk I/O
+     iostat -x 1 5
+  
+  4. Check cache hit ratio
+     SELECT sum(heap_blks_hit)/(sum(heap_blks_hit) + sum(heap_blks_read)) as cache_hit
+     FROM pg_statio_user_tables;
+
+Possible Causes:
+  a) Long-running query blocking others
+     Fix: CANCEL or TERMINATE query, add index
+  
+  b) Missing index causing sequential scan
+     Fix: Create appropriate index
+  
+  c) Table bloat due to many updates
+     Fix: VACUUM ANALYZE, REINDEX if needed
+  
+  d) Cache eviction causing more disk reads
+     Fix: Increase cache, optimize query
+
+Resolution:
+  ANALYZE table_name;
+  REINDEX INDEX index_name;
+  Restart connection pool
+```
+
+**Scenario 3: Custodian API Timeout**
+
+```
+Symptom: Portfolio data stale, users see old values
+
+Investigation:
+  1. Check custodian API health
+     curl -v https://api.custodian.com/health
+  
+  2. Check network connectivity
+     ping api.custodian.com
+     traceroute api.custodian.com
+  
+  3. Check application logs for timeout errors
+     grep "CUSTODIAN_TIMEOUT" /var/log/portfolio-service.log
+
+Possible Causes:
+  a) Custodian API experiencing outage
+     Fix: Enable circuit breaker, use cached data
+  
+  b) Network connectivity issue
+     Fix: Check firewall rules, VPN connection
+  
+  c) Slow API response time
+     Fix: Increase timeout, implement retry logic
+
+Resolution:
+  If short-term issue:
+    - Enable fallback (use cached data)
+    - Show users "using cached data" message
+    - Wait for custodian recovery
+  
+  If persistent:
+    - Escalate to custodian support
+    - Implement manual data import
+    - Notify customers
+```
+
+---
+
+## 5. MAINTENANCE & UPDATES
+
+### 5.1 Security Patching
+
+**Patch Schedule:**
+```
+Security Updates:
+  - Critical: Apply immediately (within 24 hours)
+    Example: Authentication bypass, RCE vulnerability
+  
+  - High: Apply within 1 week
+    Example: Data exposure vulnerability, CSRF bypass
+  
+  - Medium: Apply within 2 weeks
+    Example: Denial of service, privilege escalation
+  
+  - Low: Apply within 1 month
+    Example: Information disclosure, attack surface reduction
+
+Patching Process:
+  1. Receive security advisory
+  2. Assess impact on platform
+  3. Create patch and test thoroughly
+  4. Schedule deployment on maintenance window
+  5. Deploy using blue-green approach
+  6. Verify patch applied
+  7. Monitor for regressions
+  8. Document in security log
+```
+
+### 5.2 Database Maintenance
+
+**Daily Maintenance:**
+```
+1. Backup verification
+   - Check backup completion
+   - Verify backup size reasonable
+   - Test restore capability
+
+2. Monitoring
+   - Check error logs
+   - Check performance logs
+   - Check replication lag
+
+3. Connection pool
+   - Monitor connection count
+   - Kill idle connections if needed
+```
+
+**Weekly Maintenance:**
+```
+1. ANALYZE statistics
+   ANALYZE;
+   
+2. Check for missing indexes
+   SELECT * FROM missing_indexes;
+   
+3. Reindex if needed
+   REINDEX INDEX index_name CONCURRENTLY;
+   
+4. Check table bloat
+   SELECT * FROM bloated_tables;
+```
+
+**Monthly Maintenance:**
+```
+1. VACUUM FULL (during maintenance window)
+   VACUUM FULL ANALYZE;
+   
+2. Archive old data
+   - Move data > 7 years to archive storage
+   - Compress archive
+   
+3. Update statistics
+   ANALYZE;
+   CLUSTER;
+```
+
+---
+
+## 6. CAPACITY PLANNING
+
+### 6.1 Growth Projections
+
+**Year 1 Projections:**
+```
+Firms: 100 → 500 (5x growth)
+Clients: 10,000 → 50,000
+AUM: $5B → $50B
+Transactions/Day: 1,000 → 5,000
+
+Infrastructure Scaling:
+  Q1: 500GB database, 2 DB replicas
+  Q2: 750GB database, 2 DB replicas + 1 archive
+  Q3: 1TB database, 3 DB replicas
+  Q4: 1.5TB database, 4 DB replicas + archive
+
+API Capacity:
+  Q1: 100 requests/sec sustained
+  Q2: 150 requests/sec sustained
+  Q3: 250 requests/sec sustained
+  Q4: 400 requests/sec sustained
+```
+
+**Capacity Alerts:**
+```
+When disk usage > 70%:
+  - Alert to capacity team
+  - Plan expansion
+  
+When database growth rate > 50GB/month:
+  - Archive old data
+  - Review query optimization
+  
+When API latency trend increasing:
+  - Review performance metrics
+  - Upgrade infrastructure or optimize code
+```
+
+---
+
+## 7. COMMUNICATION & ESCALATION
+
+### 7.1 Communication Channels
+
+**Internal Communication:**
+```
+Real-time Incident: #incident-response Slack channel
+  - Used for active incident discussion
+  - Post every 15-30 minutes
+  
+Team Notifications: Pagerduty + email
+  - On-call escalation
+  - Alert notifications
+  
+Planning & Roadmap: Weekly engineering standup
+  - Monday 10am EST
+  - 30 minutes
+  - Led by engineering manager
+```
+
+**Customer Communication:**
+```
+Status Page: https://status.platform.com
+  - Public visibility
+  - Real-time status updates
+  - Incident history
+
+Email Notifications: major-incidents@customers.com
+  - For Severity 1 incidents
+  - Sent within 30 minutes of detection
+  - Includes ETA for resolution
+
+In-app Notifications: For Sev 1 incidents
+  - Banner: "Service degradation detected"
+  - Shows estimated impact
+```
+
+---
+
+## 8. KNOWLEDGE BASE & RUNBOOKS
+
+### 8.1 Runbook Repository
+
+**Maintained in:**
+- GitHub: `/docs/runbooks/`
+- Searchable in Notion
+- Linked from PagerDuty escalation policies
+
+**Runbook Templates:**
+```
+Title: [Service] - [Issue Type]
+Trigger: [Symptoms of issue]
+Severity: [1-4]
+
+Investigation Steps:
+  1. [First step with commands]
+  2. [Second step with commands]
+  3. [Third step with commands]
+
+Root Cause Analysis:
+  - Cause A: How to check + how to fix
+  - Cause B: How to check + how to fix
+
+Resolution:
+  [Step-by-step fix process]
+
+Prevention:
+  [How to prevent this in future]
+```
+
+---
+
+**END OF DETAILED PRODUCTION SUPPORT DOCUMENT**
+
+## APPENDIX: QUICK REFERENCE
+
+### Emergency Contacts
+```
+On-Call Rotation: https://sched.co/wealth-platform-oncall
+PagerDuty: https://wealth-platform.pagerduty.com
+Status Page: https://status.platform.com
+Slack: #incident-response
+```
+
+### Quick Diagnosis
+```
+High Error Rate:
+  1. Check k8s pods: kubectl get pods -n production
+  2. Check logs: kubectl logs deployment/[service]
+  3. Check alerts in PagerDuty
+  
+High Latency:
+  1. Check DB CPU: SELECT load_avg FROM pg_stat_statements
+  2. Check active queries: SELECT * FROM pg_stat_activity
+  3. Check cache: redis-cli INFO stats
+  
+Service Down:
+  1. Check deployment status: kubectl rollout status
+  2. Rollback if needed: kubectl rollout undo
+  3. Notify team immediately
+```
+
+### Key Commands
+```
+Restart service: kubectl rollout restart deployment/[service]
+View logs: kubectl logs deployment/[service] --tail=200 -f
+Database query: psql -c "SELECT ..."
+Redis: redis-cli
+Scale service: kubectl scale deployment/[service] --replicas=5
+```
+
+This comprehensive 7-document suite provides complete guidance for implementing, deploying, and supporting a world-class Wealth Management Platform benchmarked against industry leaders.

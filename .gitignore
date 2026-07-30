@@ -3,3 +3,9 @@ dist
 .env
 .env.*
 *.env
+.DS_Store
+*.pdf
+*.epub
+*.docx
+*.zip
+

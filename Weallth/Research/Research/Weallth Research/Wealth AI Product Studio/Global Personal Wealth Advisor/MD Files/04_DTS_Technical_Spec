@@ -1,0 +1,890 @@
+# COMPREHENSIVE WEALTH MANAGEMENT PLATFORM
+## Detailed Technical Specification (DTS)
+### Technology Stack, Infrastructure & Implementation Details
+
+---
+
+## EXECUTIVE SUMMARY
+
+This document provides comprehensive technical specifications for the Wealth Management Platform implementation, including technology stack, infrastructure design, API specifications, security architecture, and operational procedures.
+
+**Document Version:** 1.0  
+**Date:** January 24, 2026
+
+---
+
+## 1. TECHNOLOGY STACK
+
+### 1.1 Backend Services
+
+**Primary Language & Frameworks:**
+
+| Service | Language | Framework | Database | Cache |
+|---------|----------|-----------|----------|-------|
+| CRM Service | Java/Kotlin | Spring Boot 3.x | PostgreSQL | Redis |
+| Portfolio Service | Python/Go | FastAPI/Gin | TimescaleDB | Redis |
+| Planning Service | Python | FastAPI + Celery | PostgreSQL | Redis |
+| Trading Service | Java | Spring Boot + FIX | PostgreSQL | Redis |
+| Compliance Service | Java | Spring Boot | PostgreSQL | Redis |
+| Reporting Service | Python/Node.js | FastAPI/Express | PostgreSQL/ClickHouse | Redis |
+| Auth Service | Node.js | NestJS | PostgreSQL | Redis |
+| Integration Service | Node.js/Python | Express/FastAPI | PostgreSQL | Redis |
+| Notification Service | Node.js | Express | MongoDB | Redis |
+
+**Selection Rationale:**
+- Java/Spring Boot: Enterprise-grade, proven in financial systems, strong typing
+- Python: Scientific computing (NumPy, SciPy), rapid development, ML-ready
+- Node.js: Async I/O, real-time capabilities, rapid prototyping
+- PostgreSQL: ACID compliance, complex queries, JSON support
+- Redis: High-performance caching, session management, real-time features
+- MongoDB: Flexible documents for communications, notifications
+
+### 1.2 Frontend Technologies
+
+**Web Application:**
+- Framework: React 18.x or Vue.js 3.x
+- Build Tool: Vite or Webpack 5
+- State Management: Redux Toolkit or Pinia
+- HTTP Client: Axios or Fetch API with interceptors
+- UI Component Library: Material-UI or Tailwind CSS
+- Charts: Chart.js, D3.js for visualizations
+- Form Management: React Hook Form or Formik
+- Testing: Jest, React Testing Library
+
+**Rationale:**
+- React/Vue: Component-based, large ecosystem, performance
+- TypeScript: Type safety, better IDE support
+- Vite: Fast build times, modern ES modules
+- Redux: Centralized state management at scale
+
+**Mobile Application:**
+- Framework: React Native or Flutter
+- State Management: Redux or Provider
+- UI Components: Native Paper or Cupertino
+- Push Notifications: Firebase Cloud Messaging
+- Local Storage: SQLite or Realm
+- Authentication: Native BiometricPrompt (Android), LocalAuthentication (iOS)
+
+### 1.3 Infrastructure & DevOps
+
+**Cloud Platform:** AWS (primary), Azure/GCP (alternatives)
+
+**Containerization:**
+- Container Runtime: Docker
+- Orchestration: Kubernetes (EKS)
+- Container Registry: Amazon ECR
+
+**Infrastructure as Code:**
+- Tool: Terraform
+- Repository: Separate repo for infrastructure code
+- State Management: Terraform Cloud or S3 backend
+
+**CI/CD Pipeline:**
+- Tool: GitHub Actions or GitLab CI
+- Container Registry: ECR
+- Deployment: GitOps using ArgoCD
+
+**Monitoring & Logging:**
+- Logging: ELK Stack (Elasticsearch, Logstash, Kibana)
+- Metrics: Prometheus + Grafana
+- APM: DataDog or New Relic
+- Alerting: PagerDuty or Opsgenie
+
+---
+
+## 2. MICROSERVICES ARCHITECTURE DETAILS
+
+### 2.1 Service Communication
+
+**Synchronous Communication (REST/gRPC):**
+```
+Request → API Gateway → Service1 → Service2 (if needed) → Response
+Latency: <500ms (p95) for cross-service calls
+```
+
+**Asynchronous Communication (Message Queue):**
+```
+Service1 → Kafka Topic → Service2
+Services: Trade execution, notifications, portfolio updates
+Latency: <5s (p95) for message delivery
+```
+
+**Service Mesh (Optional):**
+- Technology: Istio
+- Features:
+  - Service-to-service authentication (mTLS)
+  - Traffic management and routing
+  - Observability
+  - Resilience (retry, timeout, circuit breaker)
+
+### 2.2 Deployment Architecture
+
+**Kubernetes Cluster:**
+```
+Cluster (Multi-AZ):
+├─ Production Namespace
+│  ├─ CRM Service (3 replicas)
+│  ├─ Portfolio Service (5 replicas)
+│  ├─ Planning Service (2 replicas)
+│  ├─ Trading Service (3 replicas)
+│  ├─ API Gateway (3 replicas)
+│  └─ Worker Pods (Celery/background jobs)
+│
+├─ Staging Namespace
+│  └─ [Same services, 1 replica each]
+│
+└─ Development Namespace
+   └─ [Simplified setup for testing]
+```
+
+**High Availability Configuration:**
+- Multi-AZ deployment (Availability Zones)
+- Load balancing across zones
+- Automatic failover
+- Database replication
+- RTO: 15 minutes
+- RPO: 5 minutes
+
+### 2.3 Scalability Design
+
+**Horizontal Scaling:**
+- Kubernetes auto-scaling (HPA) based on CPU/Memory
+- Scaling metrics: CPU >70%, Memory >80%
+- Min replicas: 2, Max replicas: 10 per service
+- Cool-down period: 5 minutes
+
+**Vertical Scaling:**
+- Database: Managed RDS with read replicas
+- Cache: Redis cluster mode (6 nodes minimum)
+- Message Queue: Kafka with 3+ brokers
+
+**Performance Targets:**
+- API latency (p95): <200ms
+- Portfolio load time: <2 seconds
+- Report generation: <30 seconds
+- Concurrent users supported: 10,000+
+- Transactions per second (TPS): 1,000+
+
+---
+
+## 3. DATABASE SPECIFICATIONS
+
+### 3.1 PostgreSQL Configuration
+
+**Production Setup:**
+```
+RDS PostgreSQL 15.x
+├─ Primary Instance: db.r5.2xlarge (8 vCPU, 64 GB RAM)
+├─ Read Replicas (2x): db.r5.xlarge for reporting
+├─ Backup Strategy:
+│  ├─ Daily automated backups (35-day retention)
+│  ├─ Weekly long-term backups (90 days)
+│  └─ Point-in-time recovery (35 days)
+├─ Multi-AZ: Enabled
+├─ Storage: 500 GB (initial), autoscaling enabled
+└─ Monitoring: CloudWatch metrics, Enhanced Monitoring enabled
+```
+
+**Key Indexes:**
+```sql
+-- Foreign key indexes for joins
+CREATE INDEX idx_clients_household ON clients(household_id);
+CREATE INDEX idx_accounts_household ON accounts(household_id);
+CREATE INDEX idx_positions_account ON positions(account_id);
+CREATE INDEX idx_trades_account ON trades(account_id);
+
+-- Time-series indexes
+CREATE INDEX idx_positions_asofdate ON positions(as_of_date);
+CREATE INDEX idx_performance_date ON portfolio_performance(performance_date);
+
+-- Search indexes
+CREATE INDEX idx_clients_name ON clients USING GIN (
+  to_tsvector('english', COALESCE(first_name,'') || ' ' || COALESCE(last_name,''))
+);
+
+-- Audit log indexes
+CREATE INDEX idx_audit_timestamp ON audit_log(timestamp DESC);
+CREATE INDEX idx_audit_entity ON audit_log(entity_type, entity_id);
+CREATE INDEX idx_audit_user ON audit_log(user_id);
+
+-- Partitioning for very large tables
+PARTITION BY RANGE (YEAR(performance_date));
+```
+
+**Tuning Parameters:**
+```
+shared_buffers = 16GB (25% of RAM)
+effective_cache_size = 48GB (75% of RAM)
+maintenance_work_mem = 4GB
+work_mem = 32MB
+random_page_cost = 1.1 (SSD)
+max_parallel_workers_per_gather = 4
+max_parallel_workers = 8
+```
+
+### 3.2 Redis Cache Configuration
+
+**Redis Cluster:**
+```
+6 nodes minimum (3 primary, 3 replica)
+Each node: cache.r5.large (2 GB)
+Cluster mode: Enabled
+Eviction policy: allkeys-lru
+Persistence: 
+  - RDB snapshots every 15 minutes
+  - AOF rewrite after 1 GB of logs
+```
+
+**Cache Strategy:**
+```
+1. Session Cache (expiry: 30 mins)
+   Key: session:{session_id}
+   Value: User data, permissions, IP
+   
+2. Client Data Cache (expiry: 5 mins)
+   Key: client:{client_id}
+   Value: Full client object
+   
+3. Portfolio Cache (expiry: 1 min)
+   Key: portfolio:{account_id}
+   Value: Cached position data
+   
+4. Computed Metrics (expiry: 1 hour)
+   Key: metrics:{account_id}:{metric_type}
+   Value: Performance, allocation, etc.
+   
+5. Rate Limiting (sliding window)
+   Key: ratelimit:{user_id}:{endpoint}
+   Value: Request count
+```
+
+### 3.3 TimescaleDB for Time-Series
+
+**Configuration:**
+```
+CREATE HYPERTABLE public.portfolio_performance (
+  PRIMARY KEY (performance_id, performance_date)
+) PARTITION BY TIME (performance_date INTERVAL '1 month');
+
+CREATE HYPERTABLE public.market_prices (
+  PRIMARY KEY (security_id, price_date)
+) PARTITION BY TIME (price_date INTERVAL '1 day');
+```
+
+**Retention Policy:**
+```
+SELECT add_retention_policy('portfolio_performance', INTERVAL '7 years');
+SELECT add_retention_policy('market_prices', INTERVAL '2 years');
+```
+
+### 3.4 MongoDB for Documents
+
+**Configuration:**
+```
+MongoDB Atlas (Managed Service)
+├─ Cluster: M30 (8GB storage)
+├─ Replica Set: 3 nodes
+├─ Backup: Daily (30-day retention)
+├─ Index: Compound indexes on collection + date
+└─ Sharding: By firm_id for large deployments
+```
+
+---
+
+## 4. API SPECIFICATIONS
+
+### 4.1 REST API Standards
+
+**Request Format:**
+```
+GET /api/v1/portfolio/accounts/{accountId}/positions
+Authorization: Bearer {JWT_TOKEN}
+Content-Type: application/json
+X-Request-ID: {UUID}
+X-Idempotency-Key: {UUID} (for POST/PUT)
+
+Query Parameters:
+  - page: 1 (default)
+  - limit: 50 (default)
+  - sort: field:asc|desc
+  - filter: {field}:{value}
+```
+
+**Response Format:**
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "positionId": "pos_123456",
+      "securityId": "sec_789012",
+      "quantity": 100.5,
+      "unitPrice": 150.25,
+      "marketValue": 15100.625,
+      "costBasis": 14000.00,
+      "unrealizedGain": 1100.625,
+      "unrealizedGainPct": 7.86,
+      "percentOfAccount": 12.5,
+      "asOfDate": "2026-01-24"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "limit": 50,
+    "total": 127,
+    "totalPages": 3,
+    "hasNext": true,
+    "hasPrev": false
+  },
+  "meta": {
+    "timestamp": "2026-01-24T08:15:30.123Z",
+    "requestId": "req_abc123xyz",
+    "executionTime": 145  // milliseconds
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "success": false,
+  "data": null,
+  "errors": [
+    {
+      "code": "VALIDATION_ERROR",
+      "message": "Invalid account ID format",
+      "field": "accountId",
+      "details": "Expected UUID format, got 'invalid123'"
+    }
+  ],
+  "meta": {
+    "timestamp": "2026-01-24T08:15:30.123Z",
+    "requestId": "req_abc123xyz"
+  }
+}
+```
+
+**HTTP Status Codes:**
+```
+200 OK - Request successful
+201 Created - Resource created
+202 Accepted - Request accepted (async processing)
+204 No Content - Successful DELETE
+400 Bad Request - Invalid input
+401 Unauthorized - Missing/invalid authentication
+403 Forbidden - Insufficient permissions
+404 Not Found - Resource not found
+409 Conflict - Resource conflict (e.g., duplicate)
+429 Too Many Requests - Rate limit exceeded
+500 Internal Server Error
+503 Service Unavailable - Maintenance
+```
+
+### 4.2 Authentication & Authorization
+
+**JWT Token Structure:**
+```json
+{
+  "header": {
+    "alg": "RS256",
+    "typ": "JWT",
+    "kid": "key_id_1"
+  },
+  "payload": {
+    "sub": "user_123456",
+    "email": "advisor@firm.com",
+    "firm_id": "firm_789",
+    "roles": ["advisor", "manager"],
+    "permissions": ["read:client", "write:portfolio", "execute:trade"],
+    "aud": "https://api.platform.com",
+    "iss": "https://auth.platform.com",
+    "iat": 1674532530,
+    "exp": 1674533130  // 10 minutes
+  }
+}
+```
+
+**Token Refresh Flow:**
+```
+1. Initial login returns: access_token (10 min), refresh_token (30 days)
+2. Access token expires → Client uses refresh_token
+3. Server validates refresh_token and issues new access_token
+4. Refresh token stored securely (HttpOnly cookie, no JavaScript access)
+```
+
+**Permission Model:**
+```
+Permissions:
+├─ read:client, write:client, delete:client
+├─ read:portfolio, write:portfolio
+├─ read:plan, write:plan
+├─ read:trade, write:trade, execute:trade
+├─ read:compliance, write:compliance
+├─ read:report, export:report
+├─ admin:system
+└─ ...
+
+Roles:
+├─ admin: All permissions
+├─ manager: Team management, approval workflows
+├─ advisor: Client and portfolio management
+├─ operations: Account setup, trade processing
+├─ compliance: Monitoring, reporting (read-only mostly)
+└─ client: Self-service portal features
+```
+
+### 4.3 Webhook System
+
+**Webhook Configuration:**
+```
+POST /api/v1/webhooks
+{
+  "url": "https://external-system.com/webhooks/platform",
+  "events": ["trade.executed", "plan.generated", "alert.triggered"],
+  "version": "2026-01-01",
+  "secret": "whsec_xxxxxxxxxxxxx"  // For signature verification
+}
+```
+
+**Webhook Payload:**
+```json
+{
+  "id": "evt_123456789",
+  "type": "trade.executed",
+  "timestamp": "2026-01-24T08:15:30Z",
+  "data": {
+    "tradeId": "trd_123456",
+    "accountId": "acc_123456",
+    "securityId": "sec_123456",
+    "type": "BUY",
+    "quantity": 100,
+    "price": 150.25,
+    "amount": 15025.00,
+    "status": "settled",
+    "executionTime": "2026-01-24T08:15:15Z"
+  },
+  "attempt": 1
+}
+```
+
+**Webhook Signature Verification:**
+```
+Header: X-Webhook-Signature: sha256=xxxxxxxxxxxxxx
+Verification:
+  computed_signature = HMAC-SHA256(payload, secret)
+  if X-Webhook-Signature != computed_signature:
+    reject request
+```
+
+---
+
+## 5. SECURITY SPECIFICATIONS
+
+### 5.1 Network Security
+
+**AWS Security Groups:**
+```
+Public Subnet (ALB):
+  Inbound: 
+    - HTTP (80) from 0.0.0.0/0
+    - HTTPS (443) from 0.0.0.0/0
+  Outbound: All to private subnets
+
+Private Subnet (EKS):
+  Inbound:
+    - All from ALB security group
+    - SSH (22) from bastion only
+  Outbound:
+    - HTTPS (443) to internet (for custodian APIs)
+    - PostgreSQL (5432) to RDS subnet
+    - Redis (6379) to Cache subnet
+
+Database Subnet (RDS):
+  Inbound:
+    - PostgreSQL (5432) from app security group only
+  Outbound: None required
+```
+
+**WAF Configuration:**
+```
+Rate Limiting: 2000 requests per 5 minutes per IP
+SQL Injection Protection: Enabled
+XSS Protection: Enabled
+DDoS Protection: Enabled (AWS Shield)
+Geographic Blocking: Disable access from high-risk countries
+```
+
+### 5.2 Data Encryption
+
+**At Rest:**
+```
+Database Encryption: AES-256 (KMS managed keys)
+S3 Storage: AES-256 (SSE-S3)
+Secrets: AWS Secrets Manager with KMS
+Key Rotation: Annual (automatic)
+```
+
+**In Transit:**
+```
+TLS Version: 1.3 (minimum)
+Cipher Suites: 
+  - TLS_AES_256_GCM_SHA384 (preferred)
+  - TLS_CHACHA20_POLY1305_SHA256
+Certificate: AWS Certificate Manager (auto-renewal)
+Certificate Pinning: Implemented in mobile app
+```
+
+**Field-Level Encryption:**
+```
+Encrypted PII Fields:
+  - SSN/Tax ID
+  - Bank account numbers
+  - Credit card numbers
+  - Email addresses
+  - Phone numbers
+
+Encryption Method: AES-256-GCM
+Key Management: AWS KMS with service keys
+```
+
+### 5.3 Application Security
+
+**Input Validation:**
+```
+All inputs validated server-side (never trust client)
+
+Email: 
+  - RFC 5322 format check
+  - MX record verification
+  - Disposable email blocklist
+
+Phone:
+  - E.164 format or national format
+  - Valid carrier check
+
+SSN:
+  - Format XXXXX-XXXX (or XXXXXXXXXXX)
+  - Range validation (001-00-0000 to 999-99-9999)
+  - Known invalid patterns excluded
+
+Amounts:
+  - Decimal(18,2) format
+  - Range: $0.01 to $999,999,999,999.99
+  - Positive values validation
+
+Percentages:
+  - Decimal(5,2) format
+  - Range: 0.00 to 100.00
+```
+
+**Output Encoding:**
+```
+HTML contexts: HTML entity encoding
+JavaScript contexts: JSON encoding
+URL contexts: URL encoding
+SQL contexts: Parameterized queries (no string concatenation)
+```
+
+**CSRF Protection:**
+```
+Synchronizer Token Pattern:
+  1. Server generates CSRF token
+  2. Token sent to client in form/response header
+  3. Client must include token in modifying requests
+  4. Server validates token matches session token
+
+Token Properties:
+  - Unique per session
+  - 32 bytes random
+  - Expires with session
+  - Used for all POST/PUT/DELETE requests
+```
+
+**Session Security:**
+```
+Session Configuration:
+  - Duration: 30 minutes inactivity timeout
+  - HttpOnly flag: Prevents JavaScript access
+  - Secure flag: HTTPS only
+  - SameSite: Strict (prevents CSRF attacks)
+  - Regenerate on login: Prevent session fixation
+
+Session Storage:
+  - Redis (distributed sessions)
+  - Key: session:{session_id}
+  - Value: Encrypted user data
+  - TTL: 30 minutes from last activity
+```
+
+### 5.4 Authentication & MFA
+
+**Password Requirements:**
+```
+Minimum Length: 12 characters
+Complexity: 
+  - At least 1 uppercase (A-Z)
+  - At least 1 lowercase (a-z)
+  - At least 1 digit (0-9)
+  - At least 1 special character (!@#$%^&*)
+  - Cannot contain username
+
+Password History: Last 5 passwords cannot be reused
+Expiration: 90 days
+Failed Attempts: Lock after 5 failed attempts (15 min)
+```
+
+**Multi-Factor Authentication:**
+```
+Supported Methods:
+  1. Time-based One-Time Password (TOTP)
+     - Google Authenticator, Microsoft Authenticator
+     - 6-digit code, 30-second window
+  
+  2. SMS
+     - Delivery via Twilio
+     - 6-digit code, 5-minute expiration
+     - Backup codes provided (10 single-use codes)
+  
+  3. Hardware Security Keys
+     - FIDO2/U2F protocol
+     - YubiKey, Titan, etc.
+
+MFA Enforcement:
+  - Required for all advisors and operations staff
+  - Required for administrators
+  - Optional for clients (recommend)
+  - Remember device for 30 days (with additional verification)
+```
+
+---
+
+## 6. INTEGRATION SPECIFICATIONS
+
+### 6.1 Custodian Integrations
+
+**Supported Custodians:**
+
+| Custodian | API Type | Auth | Frequency | Data |
+|-----------|----------|------|-----------|------|
+| Schwab | REST | OAuth 2.0 | Real-time | Positions, Trades, Cash |
+| TD Ameritrade | REST | OAuth 2.0 | Real-time | Positions, Trades |
+| Fidelity | Proprietary | mTLS Cert | Real-time | Positions, Trades |
+| Pershing | SFTP | SSH Key | Nightly Batch | Positions, Settlements |
+| Apex | REST | API Key | Real-time | Positions, Trades |
+| Axos | REST | OAuth 2.0 | Real-time | Positions, Trades |
+
+**Integration Architecture:**
+```
+Custodian Connector Pattern:
+  1. Authentication: Stored securely in Secrets Manager
+  2. Request: Query positions, trades, cash
+  3. Response: Parse XML/JSON response
+  4. Transformation: Map to internal data model
+  5. Validation: Verify data integrity
+  6. Storage: Update database
+  7. Notification: Trigger dependent services
+  8. Error Handling: Retry logic, alerts on failure
+```
+
+**Sample Integration: Schwab API**
+```
+Endpoint: https://api.schwab.com/v1/accounts/{accountId}/positions
+Authentication: 
+  POST /oauth2/token
+  Body: {client_id, client_secret, grant_type: "authorization_code"}
+  Returns: {access_token, refresh_token, expires_in}
+
+Request:
+  GET /v1/accounts/{accountId}/positions
+  Header: Authorization: Bearer {access_token}
+
+Response:
+  {
+    "positions": [
+      {
+        "positionId": "123456789",
+        "symbol": "AAPL",
+        "quantity": 100.0,
+        "price": 150.25,
+        "marketValue": 15025.00
+      }
+    ]
+  }
+```
+
+---
+
+## 7. OPERATIONAL SPECIFICATIONS
+
+### 7.1 Monitoring & Alerting
+
+**Key Metrics:**
+
+| Metric | Target | Alert |
+|--------|--------|-------|
+| API Latency (p95) | <200ms | >500ms |
+| Portfolio Load Time | <2s | >5s |
+| Database CPU | <70% | >85% |
+| Database Connections | <200 | >300 |
+| Cache Hit Rate | >90% | <80% |
+| Error Rate | <0.1% | >1% |
+| Uptime | >99.99% | Any downtime |
+
+**Monitoring Stack:**
+```
+Data Collection:
+  - Prometheus: Scrapes metrics every 30 seconds
+  - CloudWatch: Infrastructure metrics
+  - Application logs: ELK Stack
+
+Visualization:
+  - Grafana Dashboards:
+    * System health
+    * API performance
+    * Database performance
+    * Business metrics (trades/day, clients/AUM, etc.)
+
+Alerting:
+  - PagerDuty: On-call escalation
+  - Slack: Team notifications
+  - Email: Critical alerts summary
+```
+
+### 7.2 Logging Standards
+
+**Log Levels:**
+```
+DEBUG: Detailed debugging information (dev only)
+INFO: General informational messages
+WARNING: Warning messages (recoverable errors)
+ERROR: Error messages (unrecoverable errors)
+CRITICAL: Critical system failures
+```
+
+**Log Format:**
+```json
+{
+  "timestamp": "2026-01-24T08:15:30.123Z",
+  "level": "INFO",
+  "service": "portfolio-service",
+  "message": "Portfolio updated successfully",
+  "userId": "usr_123456",
+  "accountId": "acc_789012",
+  "duration": 145,
+  "requestId": "req_abc123xyz",
+  "tags": ["portfolio", "update"]
+}
+```
+
+**Log Retention:**
+```
+Development: 7 days
+Staging: 30 days
+Production: 
+  - Application logs: 90 days
+  - Audit logs: 7 years
+  - Archive: Long-term storage (Glacier)
+```
+
+---
+
+## 8. PERFORMANCE TUNING
+
+### 8.1 Database Query Optimization
+
+**Query Analysis:**
+```sql
+-- Identify slow queries
+SELECT query, calls, mean_exec_time, max_exec_time
+FROM pg_stat_statements
+WHERE mean_exec_time > 100  -- > 100ms
+ORDER BY mean_exec_time DESC;
+
+-- Example slow query and optimization
+-- SLOW: SELECT * FROM positions WHERE account_id = 'acc_123'
+-- FAST: SELECT position_id, security_id, quantity, unit_price, market_value 
+--       FROM positions WHERE account_id = 'acc_123'
+--       (Add index on account_id, security_id)
+
+-- Use EXPLAIN ANALYZE to check execution plan
+EXPLAIN ANALYZE
+SELECT * FROM portfolio_performance 
+WHERE account_id = 'acc_123' AND performance_date >= NOW() - INTERVAL '1 year';
+```
+
+### 8.2 Caching Strategy
+
+**Cache Warming:**
+```
+On startup:
+  1. Warm frequently accessed data (top 100 clients)
+  2. Pre-calculate common metrics
+  3. Load security master data
+  4. Pre-populate session cache
+
+On request:
+  1. Check cache first (<10ms)
+  2. If miss, query database
+  3. Store in cache (expiry based on data type)
+  4. Return to client
+```
+
+---
+
+## 9. COMPLIANCE & AUDIT
+
+### 9.1 Regulatory Compliance
+
+**SEC Compliance:**
+```
+- Form ADV filing integration
+- Suitability documentation
+- Best execution reporting
+- Client disclosure tracking
+- Trade supervision
+```
+
+**FINRA Compliance:**
+```
+- Trade reporting (within 15 seconds)
+- Order routing rules
+- Margin requirements
+- Supervisor review trails
+```
+
+**Data Retention:**
+```
+- Client records: 7 years minimum
+- Trade confirmations: 7 years
+- Communications: 7 years
+- Audit logs: 7 years
+- Email: 7 years (regulatory requirement)
+```
+
+---
+
+## 10. DISASTER RECOVERY
+
+### 10.1 Backup & Recovery
+
+**Backup Strategy:**
+```
+RPO (Recovery Point Objective): 5 minutes
+RTO (Recovery Time Objective): 15 minutes
+
+Database Backups:
+  - Automated daily snapshots
+  - Continuous replication to standby region
+  - Point-in-time recovery (35 days)
+  - Test recovery monthly
+
+Disaster Recovery:
+  - Failover to standby region: 15 minutes
+  - Database failover: Automatic
+  - Application failover: Manual trigger
+  - Network failover: Automatic
+```
+
+---
+
+**END OF DETAILED TECHNICAL SPECIFICATION**

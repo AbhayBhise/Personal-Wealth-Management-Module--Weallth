@@ -741,9 +741,9 @@ export async function getAIGoalCoachMessage(userId: string, goalId: string) {
   const options = await getGoalOptions(userId, goalId);
   if (!goal || !options) return null;
 
-  const retrievedChunks = ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goals");
-  const promptContext = `Goal Name: ${goal.name}. Client needs to know options to fix shortfall.`;
-  const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
+  const retrievedChunks = await ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goal");
+  const promptContext = `Goal Name: ${goal.name}. Client needs to know options to fix shortfall. Shortfall amount: ₹${goal.shortfall.toLocaleString()}. Current savings: ₹${goal.monthly_contribution.toLocaleString()}/month.`;
+  const synthesizedBase = await ragEngine.generateResponse(promptContext, retrievedChunks);
 
   return {
     goal_id: goalId,
@@ -756,15 +756,15 @@ export async function getAIRetirementCoachMessage(userId: string) {
   const profile = await repo.getClientProfile(userId);
   const age = profile?.age ?? 40;
   
-  const retrievedChunks = ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
-  const promptContext = `Retirement Plan for Age ${age}. Explain longevity and withdrawals.`;
-  const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
+  const retrievedChunks = await ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
+  const promptContext = `Retirement Plan for Client Age ${age}. Explain longevity risk, withdrawal sequencing, and spending principal in retirement.`;
+  const synthesizedBase = await ragEngine.generateResponse(promptContext, retrievedChunks);
   
   return {
     user_id: userId,
     sections: [
       {
-        title: 'Retirement Roadmap via RAG',
+        title: 'Retirement Roadmap via Gemini RAG',
         content: synthesizedBase,
       },
       {
@@ -781,14 +781,15 @@ export async function getAIRecommendationExplanation(userId: string, recId: stri
   const rec = recs.find(r => r.id === recId);
   if (!rec) return null;
 
-  const categoryFilter = rec.category === "Debt" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
-  const retrievedChunks = ragEngine.semanticSearch(rec.category, categoryFilter);
-  const promptContext = `Explain rule violation for ${rec.category}.`;
-  const synthesizedBase = ragEngine.generateResponse(promptContext, retrievedChunks);
+  const categoryFilter = rec.category === "Debt Management" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
+  const retrievedChunks = await ragEngine.semanticSearch(rec.category, categoryFilter);
+  const promptContext = `Explain rule violation for ${rec.category}. Message: ${rec.alert_message}`;
+  const synthesizedBase = await ragEngine.generateResponse(promptContext, retrievedChunks);
 
   let action = '';
 
   switch (rec.category) {
+    case 'Debt Management':
     case 'Debt':
       action = `Pause extra investing and aggressively pay down this balance.`;
       break;
@@ -812,18 +813,10 @@ export async function getAIRecommendationExplanation(userId: string, recId: stri
 
 export async function chatWithAdvisor(userId: string, message: string) {
   const profile = await repo.getClientProfile(userId);
-  const context = `User Profile: Age ${profile?.age ?? 'Unknown'}. User Message: ${message}`;
+  const promptContext = `User Profile: Age ${profile?.age ?? 'Unknown'}. User Question: ${message}`;
   
-  const retrievedChunks = ragEngine.semanticSearch(message);
-  
-  console.log(`[AI CHAT] Generating response for user ${userId}`);
-  
-  let responseText = "";
-  if (retrievedChunks.length > 0) {
-    responseText = `According to our principles: "${retrievedChunks[0].text}"\n\nHow can I help you apply this to your specific financial situation?`;
-  } else {
-    responseText = "I'm here to help you build wealth using our proven methodology. Could you provide a bit more detail about what you'd like to discuss?";
-  }
+  const retrievedChunks = await ragEngine.semanticSearch(message);
+  const responseText = await ragEngine.generateResponse(promptContext, retrievedChunks);
 
   return {
     reply: responseText,

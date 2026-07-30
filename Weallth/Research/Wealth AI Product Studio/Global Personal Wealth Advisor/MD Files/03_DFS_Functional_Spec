@@ -1,0 +1,1110 @@
+# COMPREHENSIVE WEALTH MANAGEMENT PLATFORM
+## Detailed Functional Specification (DFS)
+### Complete Feature Specifications & User Workflows
+
+---
+
+## EXECUTIVE SUMMARY
+
+This document defines detailed functional specifications for all platform features, including step-by-step user workflows, data flows, business rules, and validation requirements. Based on industry best practices from Envestnet Tamarac, Orion, eMoney Advisor, and RightCapital.
+
+**Document Version:** 1.0  
+**Date:** January 24, 2026
+
+---
+
+## 1. CLIENT RELATIONSHIP MANAGEMENT (CRM)
+
+### 1.1 Client Profile Management
+
+**Feature:** Comprehensive client data management with family structures
+
+**User Workflow: Creating New Client**
+
+```
+Step 1: Advisor selects "Add Client" from CRM menu
+Step 2: System displays client creation form
+Step 3: Advisor enters:
+        - First name, last name, email, phone (required)
+        - Date of birth, SSN (encrypted), gender
+        - Address (street, city, state, ZIP)
+        - Citizenship, tax residency
+        - Relationship to household primary
+Step 4: Advisor selects household (or creates new)
+Step 5: Advisor enters financial profile:
+        - Net worth estimate
+        - Annual income
+        - Employment status
+        - Risk tolerance (questionnaire)
+Step 6: Advisor selects investor type:
+        - Accredited investor? (Yes/No)
+        - Qualified investor? (Yes/No)
+        - Institutional? (Yes/No)
+Step 7: System validates:
+        - Email format
+        - SSN uniqueness (prevent duplicates)
+        - Age restrictions (18+ required)
+        - Data completeness
+Step 8: System saves client and creates activity log
+Step 9: System displays confirmation
+Step 10: System automatically creates:
+        - Client folder in document storage
+        - First task (account setup)
+        - Notification to operations team
+```
+
+**Data Requirements:**
+- Full legal name (required)
+- Email address (required, unique per household)
+- Date of birth (required)
+- SSN (encrypted, optional)
+- Primary address (required)
+- Phone number (at least one: mobile or landline)
+- Risk tolerance score
+- Investment experience level
+- Accredited investor status
+
+**Business Rules:**
+- Maximum 1 SSN per household (tax return filing purposes)
+- Minimum age: 18 years old
+- Relationship to primary client (required): Self, Spouse, Child, Parent, Other
+- Email must be unique across platform (prevent duplicate clients)
+
+**Validations:**
+```
+Email: RFC 5322 compliance check
+SSN: Format XXXXX-XXX-XXXX, masked after entry
+Date of Birth: <= today, >= 100 years ago
+Phone: Valid US/Canadian format, or international E.164 format
+Address: Zip code format validation
+```
+
+### 1.2 Household Management
+
+**Feature:** Multi-generational family tracking with unlimited family depth
+
+**User Workflow: Building Family Tree**
+
+```
+Step 1: Advisor views household page
+Step 2: System displays family tree visualization
+Step 3: Advisor clicks "Add Family Member"
+Step 4: Options appear:
+        - Add new family member (new person)
+        - Link existing client (previously created)
+        - Link spouse from existing household (merge)
+Step 5: If new member:
+        - Enter relationship to selected member
+        - Enter basic info (name, DOB, email, phone)
+Step 6: If existing client:
+        - Search for client by name/SSN/email
+        - Select from search results
+        - Confirm relationship
+Step 7: System validates:
+        - No circular relationships
+        - Relationship types are logical (spouse count ≤ 2, etc.)
+        - No duplicate relationships
+Step 8: System updates family tree visualization
+Step 9: System generates notifications if accounts need linking
+```
+
+**Family Tree Structure:**
+```
+Household
+├─ Primary Client (John Doe)
+│  ├─ Spouse (Jane Doe)
+│  ├─ Child 1 (Bob Doe, age 25)
+│  ├─ Child 2 (Alice Doe, age 22)
+│  └─ Parent (Robert Doe Sr., age 75)
+└─ Related Household (Trust - Jane Doe Trustee)
+```
+
+**Supported Relationships:**
+- Self (primary)
+- Spouse/Domestic Partner
+- Child (biological, adopted, step)
+- Parent (biological, adopted, step)
+- Sibling (biological, adopted, step)
+- Grandparent
+- Grandchild
+- In-Law
+- Trustee
+- Executor
+- Power of Attorney
+- Advisor/Professional
+- Other
+
+**Business Rules:**
+- One primary client per household (required)
+- Household can have 0-2 spouses (accounts for divorces)
+- Household can have unlimited children
+- No circular relationships allowed (person cannot be their own ancestor)
+- Spouse relationships must be mutual
+- Maximum family tree depth: Unlimited
+
+### 1.3 Communication History
+
+**Feature:** Centralized communication tracking across all channels
+
+**User Workflow: Logging Communication**
+
+```
+Step 1: Advisor opens client profile
+Step 2: Advisor clicks "Log Communication"
+Step 3: Communication form displays:
+        - Type: Email, Phone, Meeting, Text, Video Call
+        - Date/Time
+        - Participants (advisor(s), client(s))
+        - Subject/Topic
+        - Notes/Summary
+        - Outcome (Information shared, Question answered, Task created, etc.)
+        - Attachments
+        - Next follow-up date (optional)
+Step 4: Advisor completes form and saves
+Step 5: System creates activity log entry
+Step 6: System sends confirmation notification
+Step 7: System automatically surfaces previous communications for context
+```
+
+**Communication Features:**
+- **Automatic Integration:**
+  - Email through Outlook/Gmail integration
+  - Calendar meetings from Outlook/Google Calendar
+  - CRM tasks from native task system
+  
+- **Manual Logging:**
+  - Phone calls, in-person meetings
+  - Text messages
+  - Other communication channels
+  
+- **Communication Timeline:**
+  - Chronological feed of all communications
+  - Grouped by conversation thread
+  - Quick search and filter
+  - Tag conversations by topic
+
+**Business Rules:**
+- All communications with clients must be logged (regulatory requirement)
+- Advisor name automatically captured from user session
+- Communication timestamp captures timezone
+- Email integrations capture automatically within 1 hour
+- Compliance keywords trigger alerts (suitability, conflicts of interest, etc.)
+
+### 1.4 Document Management
+
+**Feature:** Secure storage and organization of client documents
+
+**User Workflow: Uploading Document**
+
+```
+Step 1: Advisor opens client profile
+Step 2: Advisor clicks "Documents" tab
+Step 3: System displays document list and upload area
+Step 4: Advisor drags/drops or clicks to select file(s)
+Step 5: System displays upload dialog:
+        - Document type (dropdown): Tax Return, Bank Statement, 
+          Brokerage Statement, Insurance Policy, Will, POA, etc.
+        - Document date (picker)
+        - Category (dropdown): Financial, Legal, Insurance, Other
+        - Description (text field)
+        - Recipient: For this client or household (toggle)
+Step 6: Advisor confirms upload
+Step 7: System validates:
+        - File type (PDF, Excel, Word, Image only)
+        - File size (<50MB)
+        - Virus scan
+Step 8: System encrypts file and stores
+Step 9: System creates audit log entry
+Step 10: System displays confirmation
+```
+
+**Document Features:**
+- **Storage:**
+  - Encrypted at rest (AES-256)
+  - Full-text indexed for search
+  - Versioning (keep 5 versions)
+  - Retention policies (auto-archive after 7 years)
+  
+- **Organization:**
+  - Folder structure by document type
+  - Tagging and search
+  - Document timeline
+  - Version history
+  
+- **Sharing:**
+  - Share with client via portal (with expiration)
+  - Share with team members
+  - Share with third parties (accountant, attorney) - time-limited link
+  
+- **Compliance:**
+  - Full audit trail
+  - Retention policies enforced
+  - Encryption for PII documents
+  - Compliance hold for legal matters
+
+**Business Rules:**
+- Maximum file size: 50MB per document
+- Supported formats: PDF, XLSX, DOCX, JPG, PNG, CSV
+- Documents must be tagged with document type
+- Tax returns must be stored by calendar year
+- Documents automatically deleted after 7 years (unless hold placed)
+- Client portal can view only shared documents
+
+---
+
+## 2. PORTFOLIO MANAGEMENT
+
+### 2.1 Portfolio Aggregation & Consolidation
+
+**Feature:** Real-time aggregation from multiple custodians
+
+**Data Flow: Position Update**
+
+```
+Every 15 minutes (or real-time):
+    Custodian API Connection Established
+    ├─ Query: Account list for all firm accounts
+    ├─ Query: Current positions in each account
+    ├─ Query: Cash balances
+    ├─ Query: Pending trades
+    │
+    Data Ingestion Service
+    ├─ Parse custodian response
+    ├─ Transform to platform format
+    ├─ De-duplicate securities (map CUSIP/ISIN to internal ID)
+    ├─ Detect new positions
+    ├─ Detect deleted positions
+    │
+    Validation
+    ├─ Quantity: Must be numeric and >= 0
+    ├─ Price: Must be positive
+    ├─ Market value: Quantity × Price validation
+    ├─ Cash: Must balance
+    ├─ Compare to last update: Detect anomalies
+    │
+    Portfolio Service
+    ├─ Update positions in database
+    ├─ Update household summary
+    ├─ Recalculate portfolio metrics
+    ├─ Update client portal in real-time (WebSocket)
+    │
+    Notification
+    ├─ Log update completion
+    ├─ Alert if data issues detected
+    ├─ Trigger rebalancing alerts if drift detected
+```
+
+**Portfolio Summary Calculation:**
+
+```
+For each household account_id:
+    Get all positions where asset_of_date = TODAY
+    For each position:
+        quantity = position.quantity
+        unit_price = latest_market_price
+        market_value = quantity × unit_price
+        cost_basis = position.cost_basis
+        unrealized_gain = market_value - cost_basis
+        unrealized_gain_pct = unrealized_gain / cost_basis
+        percent_of_account = market_value / sum(all_market_values)
+    
+    Total portfolio value = sum(all market_values + cash)
+    Total cost basis = sum(all cost_basis)
+    Total unrealized gain/loss = Total portfolio value - Total cost basis
+    
+    By asset class:
+        Equities: Filter by asset_class = 'Equity'
+        Fixed Income: Filter by asset_class = 'Fixed Income'
+        ETFs: Filter by asset_class = 'ETF'
+        Alternatives: Filter by asset_class in ('Real Estate', 'Hedge Fund', etc.)
+    
+    By sector (for equities):
+        Group by security.sector
+        Sum market values per sector
+```
+
+**Business Rules:**
+- Positions rounded to 4 decimal places (shares)
+- Prices rounded to 4 decimal places
+- Market values rounded to 2 decimal places (currency)
+- Cash positions automatically included in summary
+- Settled cash and unsettled cash tracked separately
+- Positions < $1 market value still included (for audit trail)
+
+### 2.2 Performance Reporting
+
+**Feature:** Time-weighted return and performance attribution
+
+**Calculation: Time-Weighted Return (TWR)**
+
+```
+TWR = [(1 + R1) × (1 + R2) × ... × (1 + Rn)] - 1
+
+Where Rn = Return in period n
+
+For each period between cash flows:
+    Period Return = (Ending Value - Beginning Value - Net Cash Flow) / 
+                    (Beginning Value + Net Cash Flow × Timing Factor)
+    
+    Timing Factor = (Days in period - Days to cash flow) / Days in period
+    
+Example:
+    Beginning Value: $100,000
+    Contribution: $10,000 on day 15 of 30-day month
+    Ending Value: $115,000
+    
+    Adjusted Beginning Value = $100,000 + ($10,000 × (30-15)/30)
+                              = $100,000 + $5,000 = $105,000
+    
+    Return = ($115,000 - $100,000 - $10,000) / $105,000
+           = $5,000 / $105,000 = 4.76%
+```
+
+**Calculation: Money-Weighted Return (MWR)**
+
+```
+MWR (Internal Rate of Return):
+    0 = PV + (CF1/(1+MWR)^t1) + (CF2/(1+MWR)^t2) + ... + (FV/(1+MWR)^tn)
+    
+Where:
+    PV = Beginning portfolio value
+    CF = Cash flows (positive = additions, negative = withdrawals)
+    t = Time period in years
+    FV = Final portfolio value
+    
+Solved iteratively to find MWR
+```
+
+**Comparison Report Display:**
+
+```
+Performance Report
+
+Period              TWR         MWR         Benchmark    Excess Return
+Year-to-Date        +3.5%       +3.2%       +2.8%        +0.7%
+1 Year              +8.2%       +7.8%       +7.0%        +1.2%
+3 Year              +6.5% (Ann) +6.1% (Ann) +5.8% (Ann)  +0.7% (Ann)
+5 Year              +7.2% (Ann) +6.9% (Ann) +6.2% (Ann)  +1.0% (Ann)
+Since Inception      +6.8% (Ann) +6.4% (Ann) +5.5% (Ann)  +1.3% (Ann)
+
+Annualization Formula:
+    Annualized Return = (Ending Value / Beginning Value) ^ (1 / Years) - 1
+```
+
+**Attribution Analysis:**
+
+```
+Attribution Report
+
+Security                     Return    Weight    Contribution
+-----------                  ------    ------    -----------
+Apple (AAPL)                +12.5%     5.0%      +0.625%
+Microsoft (MSFT)            +10.2%     4.5%      +0.459%
+Tesla (TSLA)                -15.3%     2.0%      -0.306%
+Fixed Income ETF (AGG)       +2.1%     30.0%     +0.630%
+Cash                         +0.5%     5.0%      +0.025%
+-----------                                      ---------
+Total Portfolio Return       +6.2%     100%      +1.833%
+```
+
+### 2.3 Tax Features - Tax Loss Harvesting
+
+**Feature:** Automated tax loss harvesting with wash sale prevention
+
+**User Workflow: Executing Tax Loss Harvesting**
+
+```
+Daily Process (automated):
+    For each portfolio:
+        Scan all positions
+        For each position:
+            Current market price = Get latest price
+            Cost basis = Position entry price
+            
+            If Current Price < Cost Basis:
+                Unrealized Loss = Cost Basis - Current Price
+                If Unrealized Loss > $100: (minimum threshold)
+                    Harvestable Position Found
+                    
+                    Calculate tax benefit:
+                        Tax Benefit = Unrealized Loss × Advisor Tax Bracket
+                        (Default tax bracket: 24% federal + state = 35%)
+                    
+                    Check wash sale:
+                        For each similar security:
+                            If purchase date within 30 days of PAST sale
+                                Reject harvest (wash sale risk)
+                            If purchase within 30 days of CURRENT harvest
+                                Flag for replacement selection
+
+Advisor Workflow:
+    Step 1: Advisor opens "Tax Loss Harvesting Opportunities"
+    Step 2: System displays harvestable positions:
+            Security | Current | Cost Basis | Loss | Tax Benefit | Risk
+            ---------|---------|-----------|------|------------|------
+            AAPL     | $145    | $155      | -$10 | -$3.50     | Wash sale
+            MSFT     | $320    | $330      | -$10 | -$3.50     | OK
+    
+    Step 3: Advisor selects "Harvest MSFT"
+    
+    Step 4: System shows replacement options:
+            - Similar ETFs (QQQ, XLK, VGT)
+            - Recommended based on correlation >0.85
+            - Manual selection option
+    
+    Step 5: Advisor selects replacement (or accepts recommendation)
+    
+    Step 6: System creates trade order:
+            SELL: 50 shares MSFT @ $320 = $16,000
+            BUY: 50 shares QQQ @ $320 = $16,000
+            
+    Step 7: Advisor reviews order and clicks "Execute"
+    
+    Step 8: System:
+            - Creates both orders (sell and buy)
+            - Routes to custodian
+            - Tracks execution
+            - Monitors for wash sale violations
+            - Generates tax documentation
+            - Notifies client of activity
+```
+
+**Wash Sale Prevention Logic:**
+
+```
+Wash Sale Rule: Cannot claim loss if similar security purchased within:
+    30 days BEFORE sale
+    30 days AFTER sale
+    (Total 61-day window)
+
+Platform Implementation:
+    BEFORE checking if position is harvestable:
+        recent_buys = Get all purchases within 30 days before date
+        scheduled_buys = Get all pending/scheduled purchases within 30 days
+        
+        If recent_buys of similar security found:
+            Mark as "Wash sale risk - cannot harvest"
+        
+        Else if harvest recommended within 30 days:
+            Create reminder: "Do not purchase similar security until X date"
+    
+    AFTER harvest execution:
+        Create wash sale alert for next 30 days
+        Monitor all buy orders for similar security
+        If similar purchase detected:
+            Alert: "Wash sale violation detected"
+            Advisor must approve to allow override
+```
+
+**"Pick Your Own Lots" Feature:**
+
+```
+Feature: Specific lot selection for harvesting
+
+Workflow:
+    Step 1: Advisor selects "Advanced Tax Loss Harvesting"
+    
+    Step 2: System displays all lots:
+            Purchase Date | Quantity | Price | Current Value | Gain/Loss
+            ------------|----------|-------|---------------|----------
+            2023-01-15  | 100      | $150  | $14,500       | -$1,500
+            2024-06-20  | 50       | $160  | $7,200        | -$800
+            2024-10-30  | 75       | $145  | $10,875       | +$375
+    
+    Step 3: Advisor selects specific lots to harvest:
+            [X] 2023-01-15 (100 shares)
+            [X] 2024-06-20 (50 shares)
+            [ ] 2024-10-30 (skip - gains)
+    
+    Step 4: System calculates total:
+            Total Loss to Harvest: $2,300
+            Tax Benefit (35%): $805
+            
+    Step 5: Advisor approves, system executes harvest
+    
+    Step 6: Cost basis tracking:
+            For cost basis tracking:
+                Use FIFO for remaining lots
+                Or specific identification as selected
+                Update client tax records accordingly
+```
+
+**Tax Reporting & Documentation:**
+
+```
+Generated Reports:
+    1. Tax Loss Harvesting Summary
+       - Total losses harvested YTD
+       - Tax benefit realized
+       - Wash sales avoided
+       - Replacement holdings
+    
+    2. Form 8949 Reconciliation
+       - Sales of securities
+       - Cost basis documentation
+       - Holding periods
+       - Wash sale adjustments
+    
+    3. Tax Lot Tracking Report
+       - Specific identification records
+       - Average cost basis reconciliation
+       - Audit trail of changes
+    
+    4. Year-End Tax Report
+       - Realized gains/losses
+       - Unrealized gains/losses
+       - Tax provisions
+       - State-specific reporting
+```
+
+---
+
+## 3. FINANCIAL PLANNING
+
+### 3.1 Goals-Based Planning
+
+**Feature:** Comprehensive financial goal tracking and achievement analysis
+
+**User Workflow: Creating Retirement Goal**
+
+```
+Step 1: Advisor opens client household
+Step 2: Advisor clicks "Financial Planning" tab
+Step 3: Advisor clicks "Add Goal"
+Step 4: Goal creation form displays:
+        
+        Basic Information:
+        - Goal Name: "Retirement" (required)
+        - Goal Type: Dropdown - Retirement, Education, Home, Vacation, etc.
+        - Priority: High/Medium/Low
+        - Goal Description: Text area
+        
+        Financial Details:
+        - Target Date: Retirement age 65 (date picker)
+        - Target Amount: $2,000,000 (or monthly income target: $80,000)
+        - Current Amount: $500,000 (auto-populated from portfolio)
+        - Funding Strategy:
+            o From existing portfolio
+            o From monthly contributions: $5,000/month
+            o From lump-sum: $100,000 on 12/31/2025
+        - Withdrawal Strategy:
+            o Fixed percentage: 4% of portfolio value annually
+            o Fixed amount: $80,000/year
+            o Dynamic: Guardrails approach
+        
+        Scenario Planning:
+        - Life Expectancy: Age 95 (default, adjustable)
+        - Return Assumption: 6.0% (adjustable)
+        - Inflation Assumption: 2.5% (adjustable)
+        - Tax Rate Assumption: 25% (adjustable)
+        - Risk Tolerance: Moderate (from client profile)
+
+Step 5: System validates:
+        - Target date is in future
+        - Current amount is reasonable
+        - Contributions are realistic
+        - Scenario assumptions are within reasonable ranges
+
+Step 6: Advisor clicks "Create & Analyze"
+
+Step 7: System runs Monte Carlo simulation:
+        - 10,000 scenarios of market returns
+        - Each year forward to target date
+        - Incorporates contributions, withdrawals, inflation
+        - Tracks market cycles and volatility
+        - Calculates success probability
+
+Step 8: System displays results:
+        - Success Probability: 87%
+        - 10th Percentile Outcome: $1,200,000
+        - 50th Percentile Outcome: $2,400,000
+        - 90th Percentile Outcome: $3,800,000
+        
+        - Traffic Light Status:
+            Green (70%+): "On Track - Excellent"
+            Yellow (50-70%): "At Risk - Review needed"
+            Red (<50%): "Off Track - Action required"
+
+Step 9: System generates recommendations:
+        - Increase contributions by $1,000/month to achieve 95% success
+        - Reduce withdrawal amount from $85,000 to $80,000
+        - Increase stock allocation from 50% to 55%
+
+Step 10: System creates task for advisor review
+```
+
+**Monte Carlo Simulation Engine:**
+
+```
+Algorithm: Random Walk Based Monte Carlo
+
+For each scenario (10,000 iterations):
+    year = current_year
+    balance = current_balance
+    total_success = 0
+    
+    While year <= target_year:
+        annual_return = Random(normal distribution, mean=6%, std=15%)
+        balance = balance × (1 + annual_return)
+        balance = balance + annual_contributions
+        balance = balance - annual_withdrawals
+        balance = balance - annual_fees
+        year = year + 1
+    
+    If balance >= target_amount:
+        total_success = total_success + 1
+        final_amount = balance
+
+success_probability = total_success / 10,000
+percentile_10 = 10th lowest final_amount
+percentile_50 = median final_amount
+percentile_90 = 90th highest final_amount
+```
+
+**Assumption Sets:**
+
+```
+Conservative Portfolio (30/70 stocks/bonds):
+    Return: 4.5%, Volatility: 8%
+    
+Moderate Portfolio (60/40 stocks/bonds):
+    Return: 6.0%, Volatility: 10%
+    
+Aggressive Portfolio (80/20 stocks/bonds):
+    Return: 7.5%, Volatility: 14%
+    
+Historical Data Assumptions:
+    Stock returns: 10% average annual return, 18% volatility
+    Bond returns: 5% average annual return, 6% volatility
+    Inflation: 3% average annual
+    
+Advisor can customize all assumptions per client
+```
+
+---
+
+## 4. TRADING & REBALANCING
+
+### 4.1 Rebalancing Workflow
+
+**Feature:** Model-based portfolio rebalancing with tax optimization
+
+**User Workflow: Quarterly Rebalancing**
+
+```
+Step 1: System detects rebalance trigger (Quarterly review date)
+
+Step 2: System analyzes portfolio drift:
+        Model Target Allocation: 60% Stocks / 40% Bonds
+        Current Allocation: 62% Stocks / 38% Bonds
+        Drift: +2% Stocks (within 5% tolerance, but approaching)
+        
+        Drift_Check:
+            If |Current - Target| > 5%:
+                Status = "REBALANCE RECOMMENDED"
+            If |Current - Target| > 10%:
+                Status = "REBALANCE URGENT"
+
+Step 3: System displays rebalancing recommendation:
+        Current vs. Target:
+        
+        Asset Class    | Current | Target | Diff  | Action
+        ------------|---------|--------|-------|------------
+        US Equities | $372,000| $360,000| +12K | Sell $12K
+        Intl Equities| $108,000| $120,000| -12K | Buy $12K
+        Fixed Income | $240,000| $240,000| 0    | No action
+        Cash         | $80,000 | $80,000 | 0    | No action
+        
+Step 4: System calculates tax impact:
+        Position to Sell (US Equities ETF):
+        - Market Value: $12,000
+        - Cost Basis: $10,000
+        - Unrealized Gain: $2,000
+        - Tax at 24% rate: $480
+        
+        Tax-Aware Recommendation:
+        - Harvest tax loss from underperforming position
+        - Use proceeds to partially fund rebalancing
+        - Reduce tax impact
+
+Step 5: Advisor reviews recommendation:
+        If approved:
+            - Click "Approve Rebalance"
+        If needs adjustment:
+            - Manually select securities to buy/sell
+            - Adjust quantities
+            - Accept new configuration
+
+Step 6: System generates trade orders:
+        SELL:
+        - 50 shares VTI @ $240 = $12,000 (Realized Gain: $2,000)
+        - Tax Impact: $480
+        
+        BUY:
+        - 40 shares VXUS @ $300 = $12,000 (Tax deduction: $480)
+
+Step 7: Advisor reviews trade orders (Trade Review Screen):
+        Order Summary:
+        ├─ Account: John Doe Individual Investment Account
+        ├─ Sell: 50 VTI @ $240 = $12,000
+        ├─ Buy: 40 VXUS @ $300 = $12,000
+        ├─ Net Cash Impact: $0
+        ├─ Tax Impact: -$480 (tax benefit)
+        └─ Compliance Check: ✓ PASSED
+
+Step 8: Advisor clicks "Execute Rebalance"
+
+Step 9: System routes orders to custodian API
+
+Step 10: Custodian executes trades
+
+Step 11: System monitors execution:
+        - Trade confirmation received: ✓
+        - Settlement confirmed: ✓
+        - Portfolio updated: ✓
+
+Step 12: System generates reports:
+        - Rebalance execution report
+        - Tax report
+        - Client notification
+        - Advisor calendar event created
+```
+
+**Business Rules for Rebalancing:**
+
+```
+Drift Thresholds:
+    If drift < 5%: No action (ignore minor drift)
+    If drift 5-10%: Recommend rebalance (accumulate changes)
+    If drift > 10%: Alert for urgent rebalance
+    
+Minimum Trade Threshold:
+    Do not execute trades < $500 per lot
+    Consolidate multiple small trades
+    
+Tax Considerations:
+    Calculate gain/loss for each trade
+    Prioritize selling losing positions first
+    Consider wash sales
+    Model tax impact vs. rebalancing benefit
+    
+Timing:
+    Regular rebalance: Quarterly, Semi-annually, or Annually
+    Trigger rebalance: When drift exceeds threshold
+    Manual rebalance: Advisor can initiate anytime
+    
+Multi-Account Rebalancing:
+    Create integrated rebalance across all household accounts
+    Prioritize tax-efficient account (taxable vs. IRA, etc.)
+    Execute with minimal transactions
+```
+
+---
+
+## 5. COMPLIANCE & REGULATORY
+
+### 5.1 Audit Trail & Activity Logging
+
+**Feature:** Comprehensive audit trail for all user activities
+
+**Logging Specification:**
+
+```
+Every user action logged with:
+    user_id: UUID of authenticated user
+    action_type: LOGIN, CREATE_CLIENT, EXECUTE_TRADE, etc.
+    entity_type: client, portfolio, trade, plan, etc.
+    entity_id: UUID of affected entity
+    timestamp: UTC timestamp with millisecond precision
+    ip_address: Client IP address
+    user_agent: Browser/app user agent string
+    session_id: Session identifier
+    
+    old_values: JSONB of state before change (for updates)
+    new_values: JSONB of state after change
+    difference: Calculated diff highlighting changes
+    
+    status: SUCCESS, FAIL, PARTIAL
+    error_message: If status is FAIL
+    
+Example Audit Log Entry:
+{
+    "log_id": 98765432,
+    "timestamp": "2026-01-24T08:15:30.123Z",
+    "user_id": "usr_abc123",
+    "action_type": "EXECUTE_TRADE",
+    "entity_type": "trade",
+    "entity_id": "trd_xyz789",
+    "old_values": {
+        "status": "pending",
+        "quantity": 100
+    },
+    "new_values": {
+        "status": "settled",
+        "quantity": 100,
+        "execution_price": 150.25,
+        "execution_timestamp": "2026-01-24T08:15:28Z"
+    },
+    "ip_address": "192.168.1.100",
+    "session_id": "sess_def456",
+    "status": "SUCCESS"
+}
+```
+
+**Audit Trail Access Controls:**
+
+```
+Who can view audit logs:
+    - Compliance Officer: All logs (read-only)
+    - Firm Admin: All logs for their firm
+    - Advisor: Only their own actions and team actions
+    - User: Their own actions only
+    
+Audit logs cannot be modified or deleted:
+    - Immutable once written
+    - Deletion only after regulatory retention period (7 years)
+    - Archive to cold storage after 2 years
+    
+Audit trail search capabilities:
+    - Filter by user, date range, action type, entity
+    - Full-text search on entity data
+    - Export to Excel/CSV for reviews
+    - Real-time alerts on suspicious patterns
+```
+
+---
+
+## 6. REPORTING & BUSINESS INTELLIGENCE
+
+### 6.1 Client Performance Reports
+
+**Feature:** Automated generation of professional client reports
+
+**Report Generation Workflow:**
+
+```
+Step 1: Advisor opens "Generate Report"
+
+Step 2: Advisor selects parameters:
+        - Client/Household: Select from dropdown
+        - Report Period: Month/Quarter/Year/Custom date range
+        - Report Type: 
+            o Performance Summary (1 page)
+            o Detailed Holdings (2-3 pages)
+            o Full Investment Review (5-7 pages)
+            o Custom (select sections)
+        - Format: PDF, Interactive (web), PowerPoint
+        - Include: Custom message from advisor?
+
+Step 3: Advisor clicks "Generate"
+
+Step 4: System compiles report data:
+        - Gather performance data from portfolio service
+        - Calculate benchmarks and attribution
+        - Get portfolio allocations and changes
+        - Retrieve financial plan progress
+        - Get communication history for notes
+        - Generate charts and visualizations
+
+Step 5: System renders report:
+        - Apply firm branding (logo, colors, fonts)
+        - Generate dynamic charts (embedded in PDF)
+        - Create narrative commentary
+        - Add advisor signature block
+        - Generate table of contents
+
+Step 6: System displays report:
+        - Preview in web browser
+        - Option to edit before sending
+        - Option to save as draft
+        - Option to download or email
+
+Step 7: Advisor sends to client:
+        - Email with secure link
+        - Client can view in portal
+        - Client can download PDF
+        - Expiration date (e.g., 90 days)
+        - Audit trail of client access
+
+Step 8: System creates task reminder:
+        - Schedule next report generation (in 3 months)
+        - Create follow-up meeting task
+```
+
+**Report Sections:**
+
+```
+Performance Summary Report:
+    1. Executive Summary
+       - Portfolio value, change, YTD return
+       - Traffic light status vs. goals
+       
+    2. Performance Table
+       - Returns: YTD, 1-Yr, 3-Yr, 5-Yr, Since Inception
+       - Comparison to benchmarks
+       - Attribution analysis
+       
+    3. Allocation Pie Chart
+       - Current allocation by asset class
+       - Target allocation overlay
+       
+    4. Top Holdings Table
+       - Top 10 positions by value
+       - Allocation percentages
+       - YTD return by position
+       
+    5. Commentary
+       - Market overview
+       - Portfolio positioning
+       - Action items for client
+       
+    6. Advisor Information
+       - Advisor name and contact
+       - Next review date
+       - Important links
+
+Full Investment Review Report:
+    [All above, plus:]
+    
+    7. Risk Analysis
+       - Portfolio volatility
+       - Downside risk metrics
+       - Concentration risk
+       
+    8. Tax Analysis (if applicable)
+       - Tax loss harvesting activity
+       - Realized/unrealized gains
+       - Tax provision
+       
+    9. Goal Progress
+       - Retirement plan projections
+       - Education savings progress
+       - Other goals tracking
+       
+    10. Holdings Detail
+        - Complete security listing
+        - Cost basis and gains/losses by security
+        - Sector breakdown
+        
+    11. Transactions
+        - Trades executed in period
+        - Deposits/withdrawals
+        - Fees charged
+        
+    12. Recommendations
+        - Suggested portfolio changes
+        - Rebalancing opportunities
+        - Tax optimization strategies
+```
+
+---
+
+## 7. CLIENT PORTAL & ENGAGEMENT
+
+### 7.1 Client Portal Workflows
+
+**Feature:** Secure, intuitive client portal with real-time data
+
+**User Workflow: First-Time Portal Login**
+
+```
+Step 1: Client receives email from advisor with portal link
+        "Your financial dashboard is ready!"
+        
+Step 2: Client clicks link, directed to portal login page
+
+Step 3: Portal displays login form:
+        - Email address
+        - Password (first time: create password)
+        - MFA prompt (if enabled): 
+            o Authenticator app code
+            o SMS code
+
+Step 4: System authenticates:
+        - Email/password validation
+        - MFA verification
+        - Session creation
+        - Session token issued
+
+Step 5: Client redirected to portal dashboard
+
+Step 6: Dashboard displays:
+        - Portfolio Snapshot
+            * Total portfolio value
+            * Change today/this month/this year
+            * Asset allocation pie chart
+        
+        - Goal Progress
+            * Retirement progress bar
+            * Education savings progress
+            * Other goals status
+        
+        - Recent Activity Feed
+            * Recent trades (last 5)
+            * Advisor messages
+            * Important dates (reviews, meetings)
+        
+        - Quick Actions
+            * View full holdings
+            * Review performance
+            * View financial plan
+            * Message advisor
+            * Upload documents
+
+Step 7: Client explores portal:
+        - Holdings Tab: Security-by-security breakdown
+        - Performance Tab: Charts and metrics
+        - Plan Tab: Financial plan review
+        - Documents Tab: Statements, PDFs
+        - Messages Tab: Communication with advisor
+        - Settings Tab: Preferences, password, notifications
+```
+
+**Mobile App Workflow:**
+
+```
+Step 1: Client downloads app (iOS/Android)
+
+Step 2: First launch shows onboarding:
+        - Welcome screen
+        - Login screen
+        - Biometric setup (fingerprint/face ID)
+        - Notification permission request
+
+Step 3: Client logs in (email/password + MFA)
+
+Step 4: System saves credentials securely:
+        - Touch ID/Face ID enabled
+        - Biometric authentication for future logins
+        - Session persists between app launches
+
+Step 5: Mobile dashboard displays:
+        - Portfolio card (swipeable)
+        - Goal progress cards
+        - Notification feed
+        - Quick action menu
+        - Bottom navigation:
+            * Dashboard (home)
+            * Holdings
+            * Performance
+            * Plan
+            * Messages
+
+Step 6: Notifications enabled:
+        - Portfolio milestone (new high)
+        - Goal achieved
+        - Action items from advisor
+        - Market alerts
+        - Scheduled alerts
+```
+
+---
+
+**END OF DETAILED FUNCTIONAL SPECIFICATION**
+
+*Additional sections would include detailed specifications for:
+- Task Management Workflows
+- Advisor Team Collaboration
+- Compliance Review Workflows
+- Integration Testing Scenarios
+- Error Handling & Edge Cases*

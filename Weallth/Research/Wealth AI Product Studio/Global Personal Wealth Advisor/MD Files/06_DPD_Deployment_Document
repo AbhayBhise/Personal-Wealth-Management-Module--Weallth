@@ -1,0 +1,690 @@
+# COMPREHENSIVE WEALTH MANAGEMENT PLATFORM
+## Detailed Production Deployment Document (DPD)
+### Deployment Strategy, Procedures & Runbooks
+
+---
+
+## EXECUTIVE SUMMARY
+
+This document defines the complete production deployment strategy for the Wealth Management Platform, including pre-deployment checklist, deployment procedures, rollback strategies, and operational runbooks.
+
+**Document Version:** 1.0  
+**Date:** January 24, 2026
+
+---
+
+## 1. DEPLOYMENT STRATEGY
+
+### 1.1 Deployment Approach
+
+**Blue-Green Deployment:**
+```
+Blue Environment (Current Production):
+  - Running v1.2.5
+  - 100% of traffic
+  - Fully tested and stable
+
+Green Environment (New Release):
+  - Running v1.3.0
+  - 0% of traffic
+  - Fully deployed, awaiting traffic switch
+  - Smoke tests executed
+
+Deployment Process:
+  1. Deploy v1.3.0 to Green
+  2. Run health checks in Green
+  3. Run smoke tests in Green
+  4. Switch load balancer to Green (10s traffic shift)
+  5. Monitor Green for 30 minutes
+  6. Decommission Blue (keep for 24h rollback)
+
+Rollback (if needed):
+  1. Switch load balancer back to Blue (10s traffic shift)
+  2. Investigate issues in Green
+  3. Fix and redeploy
+```
+
+**Canary Deployment (for high-risk releases):**
+```
+Phase 1: Canary (5% of traffic)
+  - Route 5% of requests to new version
+  - Monitor error rate, latency, business metrics
+  - If error rate < 1%, proceed
+  - If error rate > 1%, rollback automatically
+
+Phase 2: Early Adopters (25% of traffic)
+  - Route 25% to new version
+  - Monitor for 30 minutes
+  
+Phase 3: Full Rollout (100% of traffic)
+  - Route all traffic to new version
+  - Keep Blue environment for 24h rollback
+```
+
+### 1.2 Release Schedule
+
+**Production Release Windows:**
+```
+Primary: Thursdays 10:00 AM EST
+  - Low traffic period
+  - Full team available (Thu-Fri)
+  - Can monitor over weekend
+  
+Scheduled Maintenance: 2nd Sunday of each month
+  - 2:00 AM - 6:00 AM EST
+  - Planned downtime: Up to 1 hour
+  - Database migrations, security patches
+
+Hotfix: On-demand anytime
+  - Critical security issues
+  - Data corruption
+  - Service outage
+```
+
+**Blackout Dates (No Deployments):**
+```
+- December 15 - January 3 (Year-end financial reporting)
+- March 1-15 (Tax season)
+- June 1-30 (Mid-year reviews)
+- September 1-15 (Fiscal year-end for many firms)
+- Earnings announcement days for major events
+```
+
+---
+
+## 2. PRE-DEPLOYMENT CHECKLIST
+
+### 2.1 Release Readiness
+
+**Code Readiness:**
+```
+✓ All PRs merged to main branch
+✓ All code reviews approved
+✓ No failing tests (100% pass rate)
+✓ Code coverage maintained >80%
+✓ Security scan completed (0 critical issues)
+✓ Performance baseline established
+✓ API documentation updated
+✓ Data migration scripts tested
+✓ Rollback scripts prepared
+✓ Feature flags configured
+```
+
+**Testing Readiness:**
+```
+✓ Unit tests passed (all environments)
+✓ Integration tests passed
+✓ API contract tests passed
+✓ Performance tests passed (within baseline +10%)
+✓ Security tests passed (OWASP ZAP clean)
+✓ UAT sign-off received
+✓ Regression test suite passed
+✓ Production-like data testing completed
+✓ Disaster recovery test passed
+```
+
+**Infrastructure Readiness:**
+```
+✓ Green environment provisioned
+✓ Database backups current
+✓ Configuration validated
+✓ Secrets configured in Green
+✓ CDN cache warming strategy ready
+✓ Monitoring dashboards created
+✓ Alert rules configured
+✓ VPN/Jump box access verified
+✓ On-call engineer availability confirmed
+```
+
+**Business Readiness:**
+```
+✓ Client communication sent
+✓ Release notes published
+✓ Support team trained on new features
+✓ Documentation updated
+✓ Advisor/client facing changes communicated
+✓ Customer success team ready
+✓ Executive stakeholder approval
+```
+
+### 2.2 Pre-Deployment Health Check
+
+**72 Hours Before Deployment:**
+```
+1. Database Health
+   - Replication lag: 0 seconds
+   - Backup status: All current
+   - Disk utilization: <70%
+   - Query performance: Baseline
+   
+2. Infrastructure Health
+   - Kubernetes nodes: All Ready
+   - Pod CPU usage: <60%
+   - Memory usage: <70%
+   - Network latency: <50ms
+   
+3. External Dependencies
+   - Custodian APIs: All responding
+   - Market data feeds: All healthy
+   - Payment processors: All responding
+   - Email service: Healthy
+   - SMS service: Healthy
+   
+4. Security & Compliance
+   - No open security findings
+   - Audit logs flowing correctly
+   - Compliance checks passing
+```
+
+**24 Hours Before Deployment:**
+```
+1. Full smoke test in production
+2. Database backup verification
+3. Disaster recovery test
+4. On-call team verification
+5. Communication channels tested
+6. Customer success team briefing
+```
+
+**2 Hours Before Deployment:**
+```
+1. Final health check
+2. Team gathered (dev, ops, support)
+3. Communication channels open
+4. Monitoring dashboards live
+5. Rollback plan reviewed
+```
+
+---
+
+## 3. DEPLOYMENT PROCEDURE
+
+### 3.1 Step-by-Step Deployment
+
+**Step 1: Pre-Deployment (T-30 min)**
+```
+1. Acquire lock (only one deployment at a time)
+2. Send notification to Slack: "Deployment starting in 30 minutes"
+3. Drain connections:
+   - Set services to not accept new requests
+   - Wait for in-flight requests to complete
+   - Max wait: 10 minutes
+4. Create pre-deployment snapshot of metrics
+```
+
+**Step 2: Database Migrations (T-20 min)**
+```
+1. Connect to production database (via secure tunnel)
+2. Execute pre-deployment migration script
+   - Create new tables
+   - Add new columns (with defaults for existing rows)
+   - Create indexes (offline if possible)
+3. Validate migration:
+   - Check new tables exist
+   - Check row counts preserved
+   - Check data integrity
+4. If error: ROLLBACK immediately
+```
+
+**Example Migration Script:**
+```sql
+-- Database Migration v1.3.0
+BEGIN TRANSACTION;
+
+-- Add new column to positions table
+ALTER TABLE positions 
+ADD COLUMN asset_category VARCHAR(50) DEFAULT 'Equity';
+
+-- Create index for new column
+CREATE INDEX idx_positions_asset_category 
+ON positions(asset_category);
+
+-- Update values
+UPDATE positions SET asset_category = 'FixedIncome' 
+WHERE securities.asset_class = 'Bond';
+
+-- Validate
+SELECT COUNT(*) as total_positions,
+       COUNT(CASE WHEN asset_category IS NOT NULL THEN 1 END) as categorized
+FROM positions;
+
+COMMIT TRANSACTION;
+```
+
+**Step 3: Deploy to Green Environment (T-15 min)**
+```
+1. Trigger deployment pipeline
+   - Pull latest Docker images from registry
+   - Deploy to Green Kubernetes cluster
+   - Services starting in this order:
+     1. Database-dependent services (Portfolio, Trading)
+     2. API services (CRM, Planning, Compliance)
+     3. Front-end services
+     4. Background workers
+
+2. Health Checks:
+   ✓ All pods reaching Running state
+   ✓ Ready probes passing
+   ✓ Liveness probes passing
+   ✓ Service endpoints responsive
+   
+3. If any pod unhealthy:
+   - ABORT deployment
+   - Keep Blue running
+   - Investigate issue
+   - Reschedule deployment
+```
+
+**Step 4: Smoke Testing Green (T-10 min)**
+```
+1. Basic functionality tests:
+   - Login endpoint responding (< 200ms)
+   - Portfolio API working (< 500ms)
+   - Database queries executing
+   - Cache populated
+   
+2. Business logic tests:
+   - Can fetch client portfolio
+   - Can calculate performance
+   - Can generate report
+   - Can create trade (mock)
+   
+3. Integration tests:
+   - Custodian APIs responding
+   - Market data feeds flowing
+   - Webhooks functioning
+   
+Result: Must be 100% pass to proceed
+```
+
+**Step 5: Traffic Switch (T-5 min)**
+```
+1. Update load balancer configuration
+2. Route new requests to Green (no more to Blue)
+3. Existing connections to Blue: Allow graceful shutdown
+4. Transition: <10 seconds
+
+Before:
+  Load Balancer → Blue: 100% | Green: 0%
+  
+After:
+  Load Balancer → Blue: 0% | Green: 100%
+```
+
+**Step 6: Post-Deployment Monitoring (T-30 min)**
+```
+Time: 0-5 min (Immediate verification)
+  - Error rate: Should remain <0.1%
+  - API latency: Should be <200ms (p95)
+  - Database latency: Should be <100ms
+  - Cache hit rate: Should be >90%
+  
+Time: 5-15 min (Extended validation)
+  - Custodian API calls: All successful
+  - User login success rate: >99.9%
+  - Trade execution: Working
+  - Report generation: Working
+  
+Time: 15-30 min (Stability check)
+  - Error rate trend: Should be flat/decreasing
+  - No spike in resource usage
+  - Database replication lag: 0 seconds
+  - All services healthy
+
+If any metric fails:
+  - IMMEDIATELY trigger rollback
+  - Notify team
+  - Begin investigation
+```
+
+### 3.2 Rollback Procedure
+
+**Automatic Rollback Triggers:**
+```
+Condition: Error Rate > 1%
+  - Immediate rollback triggered
+  - Alert: CRITICAL "High error rate detected"
+  
+Condition: Latency p95 > 2 seconds
+  - Automatic rollback triggered
+  - Alert: CRITICAL "Performance degradation"
+  
+Condition: Database unreachable
+  - Automatic rollback triggered
+  - Alert: CRITICAL "Database connection failed"
+```
+
+**Manual Rollback Process:**
+```
+1. Decision to rollback made by on-call engineer
+2. Send notification: "Initiating rollback to previous version"
+3. Switch load balancer back to Blue
+4. Verify Blue responding correctly
+5. Investigation begins on Green
+6. Notification: "Rollback completed, system stable"
+```
+
+**Timeline:**
+```
+Decision to rollback: <1 minute
+Execute rollback: <10 seconds
+Verification: <5 minutes
+Total time to restore: <6 minutes
+```
+
+---
+
+## 4. POST-DEPLOYMENT ACTIVITIES
+
+### 4.1 Success Verification
+
+**24-Hour Stability Check:**
+```
+Metrics to monitor:
+  ✓ Error rate stable and low (<0.05%)
+  ✓ Latency in baseline (< 200ms p95)
+  ✓ No unexpected resource usage
+  ✓ All integrations working
+  ✓ User logins normal
+  ✓ Trade volume normal
+  ✓ Report generation normal
+
+Database:
+  ✓ Replication lag: 0s
+  ✓ Query performance: Normal
+  ✓ Disk growth: Expected rate
+  ✓ Backup completed successfully
+
+Customer Reports:
+  ✓ No customer issues logged
+  ✓ Support tickets within normal range
+  ✓ Feature adoption as expected
+
+If any issue detected:
+  - Escalate to on-call engineer
+  - May require hotfix deployment
+```
+
+**7-Day Stability Check:**
+```
+After 7 days:
+  - Remove Blue environment
+  - Archive deployment logs
+  - Publish release notes
+  - Update deployment documentation
+  - Celebrate successful deployment!
+```
+
+---
+
+## 5. DEPLOYMENT AUTOMATION
+
+### 5.1 CI/CD Pipeline
+
+**GitHub Actions Workflow:**
+```yaml
+name: Production Deployment
+
+on:
+  workflow_dispatch:  # Manual trigger only
+    inputs:
+      environment:
+        required: true
+        default: 'production'
+
+jobs:
+  pre-deployment-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify pre-deployment checklist
+        run: |
+          ./scripts/pre-deployment-check.sh
+      
+      - name: Run smoke tests
+        run: |
+          npm test -- --suite=smoke
+      
+      - name: Validate configuration
+        run: |
+          ./scripts/validate-config.sh
+
+  deploy-to-green:
+    needs: pre-deployment-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build Docker images
+        run: |
+          docker build -t platform:${{ github.sha }} .
+          docker push ecr.amazonaws.com/platform:${{ github.sha }}
+      
+      - name: Deploy to Green environment
+        run: |
+          kubectl apply -f k8s/green/ -n production
+          kubectl rollout status deployment -n production
+      
+      - name: Run smoke tests on Green
+        run: |
+          ./scripts/smoke-test-green.sh
+      
+      - name: Switch traffic to Green
+        run: |
+          kubectl patch service api-gateway -p \
+            '{"spec":{"selector":{"environment":"green"}}}'
+      
+      - name: Monitor for 30 minutes
+        run: |
+          ./scripts/monitor-deployment.sh
+
+  rollback:
+    if: failure()
+    needs: deploy-to-green
+    runs-on: ubuntu-latest
+    steps:
+      - name: Switch traffic back to Blue
+        run: |
+          kubectl patch service api-gateway -p \
+            '{"spec":{"selector":{"environment":"blue"}}}'
+      
+      - name: Notify team
+        run: |
+          curl -X POST ${{ secrets.SLACK_WEBHOOK }} \
+            -d '{"text":"Deployment rolled back - investigating"}'
+```
+
+---
+
+## 6. OPERATIONAL RUNBOOKS
+
+### 6.1 Emergency Response Runbooks
+
+**Runbook: High Error Rate**
+```
+Trigger: Error rate > 1%
+
+1. Immediate Assessment (1 min)
+   - Check error logs: kubectl logs -n production -l app=api-gateway
+   - Check if specific service affected
+   - Check if external dependency issue
+   
+2. Initial Response (2 min)
+   ✓ Open incident in PagerDuty
+   ✓ Post in incident Slack channel
+   ✓ Pull on-call architect
+   
+3. Diagnosis (5 min)
+   - Query logs: "SELECT * FROM audit_log WHERE level='ERROR'"
+   - Check database:
+     - Replication lag
+     - Active connections
+     - Slow queries
+   - Check external APIs:
+     - Custodian API status
+     - Market data feeds
+   
+4. Remediation
+   If application issue:
+     - Rollback to previous version (see Rollback procedure)
+   If database issue:
+     - Restart database connections
+     - Kill long-running queries
+     - Scale up resources if needed
+   If external API issue:
+     - Enable fallback/circuit breaker
+     - Notify customer
+     - Wait for vendor to resolve
+   
+5. Post-Incident
+   - Document root cause
+   - Create post-mortem
+   - Update monitoring rules
+   - Update this runbook if needed
+```
+
+**Runbook: Database Connection Pool Exhausted**
+```
+Trigger: Connections > 300 (of 400 max)
+
+1. Check current connections:
+   SELECT count(*) FROM pg_stat_activity;
+   SELECT * FROM pg_stat_activity WHERE state != 'idle';
+   
+2. Identify problem:
+   a) Check for long-running queries:
+      SELECT * FROM pg_stat_activity 
+      WHERE query_start < NOW() - INTERVAL '5 minutes';
+   
+   b) Check for idle connections:
+      SELECT count(*) FROM pg_stat_activity 
+      WHERE state = 'idle';
+   
+   c) Check if connection leak in application
+
+3. Take action:
+   If long-running query:
+     - CANCEL query: SELECT pg_cancel_backend(pid);
+     - If still running: TERMINATE: SELECT pg_terminate_backend(pid);
+   
+   If idle connections:
+     - Close idle connections (usually application restart)
+   
+   If connection leak:
+     - Scale down affected services
+     - Check connection pooling config
+     - Restart service
+
+4. Prevent future:
+   - Increase max_connections if needed
+   - Implement query timeout (30 seconds)
+   - Better connection pooling
+```
+
+**Runbook: Custodian API Timeout**
+```
+Trigger: Custodian API calls timing out (>30 sec)
+
+1. Verify issue:
+   curl -I https://api.custodian.com/health
+   
+2. Check if affecting portfolio loading:
+   grep "CUSTODIAN_TIMEOUT" /var/log/portfolio-service.log
+   
+3. Response:
+   Option A: Vendor experiencing outage
+     - Enable circuit breaker (fallback to cached data)
+     - Show clients "using cached data" message
+     - Wait for vendor recovery
+     - No action needed, automatic fallback
+   
+   Option B: Network connectivity
+     - Check VPN connection to custodian
+     - Check firewall rules
+     - Ping custodian IP
+     - Restart service
+
+4. Communication:
+   - Notify customer success team
+   - Update status page
+   - Send client notification if data is stale
+```
+
+---
+
+## 7. FEATURE FLAGS & GRADUAL ROLLOUT
+
+### 7.1 Feature Flags
+
+**Feature Flag Configuration:**
+```json
+{
+  "features": {
+    "new_tax_harvesting": {
+      "enabled": true,
+      "rollout_percentage": 25,  // 25% of users
+      "whitelist_firms": ["firm_123"],
+      "blacklist_firms": [],
+      "created_date": "2026-01-24",
+      "target_date": "2026-02-24"  // Full rollout
+    },
+    "mobile_app_v2": {
+      "enabled": false,
+      "rollout_percentage": 0,
+      "created_date": "2026-01-10",
+      "target_date": "2026-03-01"
+    }
+  }
+}
+```
+
+**Implementation:**
+```java
+if (featureFlags.isEnabled("new_tax_harvesting", firm.getId())) {
+    // Use new tax harvesting logic
+    return new TaxHarvestingServiceV2().process(portfolio);
+} else {
+    // Use legacy tax harvesting logic
+    return new TaxHarvestingServiceV1().process(portfolio);
+}
+```
+
+---
+
+## 8. DEPLOYMENT DOCUMENTATION
+
+### 8.1 Deployment Log
+
+**Every deployment must be logged:**
+```
+Deployment Log Template:
+
+Date: 2026-01-24
+Time: 10:00 AM EST
+Release Version: v1.3.0
+Deployed By: engineering-team
+Approver: tech-lead
+
+Changes Deployed:
+  - Feature: New tax loss harvesting (IMP-1234)
+  - Feature: Enhanced reporting (IMP-1235)
+  - Fix: Portfolio aggregation bug (BUG-567)
+
+Database Migrations: 2
+  - Migration v1.3.0_001: Add asset_category column
+  - Migration v1.3.0_002: Create performance index
+
+Deployment Time: 15 minutes
+Rollback Time: 5 minutes (if needed)
+Issues: None
+
+Post-Deployment Status:
+  ✓ All services healthy
+  ✓ Error rate normal
+  ✓ Latency in baseline
+  ✓ No customer issues reported
+
+Approved For Release: YES
+Ready For Archive: After 30 days
+```
+
+---
+
+**END OF DETAILED PRODUCTION DEPLOYMENT DOCUMENT**
