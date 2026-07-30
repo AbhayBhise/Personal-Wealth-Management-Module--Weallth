@@ -17,7 +17,7 @@ import {
 } from '../calculations/engine';
 import { generateRecommendations } from '../calculations/recommendations';
 import { GoalCategory } from '../types';
-import { ragEngine } from './rag/engine';
+import { ragEngine, ClientFinancialContext } from './rag/engine';
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -734,42 +734,70 @@ export async function getRebalancingAlerts(userId: string) {
   };
 }
 
-// ─── AI Coach Mock Services (Modules 1.1, 1.2, 1.3) ─────────────────────────
+// ─── AI Coach Services (RAG Engine Integrated) ───────────────────────────────
+
+async function fetchClientFinancialContext(userId: string): Promise<ClientFinancialContext> {
+  try {
+    const profile = await repo.getClientProfile(userId);
+    const whs = await getWHSSnapshot(userId);
+    const goals = await repo.getGoals(userId);
+    const liabilities = await repo.getLiabilities(userId);
+
+    return {
+      age: profile?.age ?? 35,
+      netWorth: whs?.net_worth ?? 0,
+      savingsRate: whs?.savings_rate ?? 0,
+      emergencyFundMonths: whs?.emergency_fund_coverage ?? 0,
+      riskProfile: profile?.risk_profile ?? 'Balanced',
+      debts: liabilities.map(l => ({
+        title: l.name,
+        amount: l.outstanding_balance,
+        apr: l.interest_rate
+      })),
+      goals: goals.map(g => ({
+        name: g.name,
+        targetAmount: g.target_amount,
+        targetYear: g.target_year,
+        isFunded: g.already_saved >= g.target_amount
+      }))
+    };
+  } catch (err) {
+    console.warn('[SERVICES] Warning fetching client context for RAG:', err);
+    return {};
+  }
+}
 
 export async function getAIGoalCoachMessage(userId: string, goalId: string) {
   const goal = await repo.getGoalById(userId, goalId);
   const options = await getGoalOptions(userId, goalId);
   if (!goal || !options) return null;
 
+  const clientContext = await fetchClientFinancialContext(userId);
   const retrievedChunks = await ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goal");
-  const promptContext = `Goal Name: ${goal.name}. Client needs to know options to fix shortfall. Shortfall amount: ₹${goal.shortfall.toLocaleString()}. Current savings: ₹${goal.monthly_contribution.toLocaleString()}/month.`;
-  const synthesizedBase = await ragEngine.generateResponse(promptContext, retrievedChunks);
+  const userQuestion = `How should I address the shortfall for my goal "${goal.name}" (Shortfall: ₹${goal.shortfall.toLocaleString()}, Monthly contribution: ₹${goal.monthly_contribution.toLocaleString()})?`;
+  
+  const synthesizedResponse = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
 
   return {
     goal_id: goalId,
-    message: `${synthesizedBase}\n\nOption A: Increase monthly savings to ₹${options.option_a_required_monthly_savings.toLocaleString()}.\nOption B: Reduce target cost to ₹${options.option_b_supported_present_cost.toLocaleString()}.\nOption C: Delay target date by ${options.option_c_delay_months} months.`,
+    message: synthesizedResponse,
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
   };
 }
 
 export async function getAIRetirementCoachMessage(userId: string) {
-  const profile = await repo.getClientProfile(userId);
-  const age = profile?.age ?? 40;
-  
+  const clientContext = await fetchClientFinancialContext(userId);
   const retrievedChunks = await ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
-  const promptContext = `Retirement Plan for Client Age ${age}. Explain longevity risk, withdrawal sequencing, and spending principal in retirement.`;
-  const synthesizedBase = await ragEngine.generateResponse(promptContext, retrievedChunks);
+  const userQuestion = `How should I plan my retirement roadmap, handle longevity risk, and order account withdrawals?`;
+  
+  const synthesizedResponse = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
   
   return {
     user_id: userId,
     sections: [
       {
         title: 'Retirement Roadmap via Gemini RAG',
-        content: synthesizedBase,
-      },
-      {
-        title: 'Spending Principal',
-        content: `Don't panic about spending your principal in retirement. It is completely normal and mathematically necessary, provided your withdrawal rate is sustainable.`,
+        content: synthesizedResponse,
       }
     ],
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
@@ -781,38 +809,26 @@ export async function getAIRecommendationExplanation(userId: string, recId: stri
   const rec = recs.find(r => r.id === recId);
   if (!rec) return null;
 
+  const clientContext = await fetchClientFinancialContext(userId);
   const categoryFilter = rec.category === "Debt Management" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
   const retrievedChunks = await ragEngine.semanticSearch(rec.category, categoryFilter);
-  const promptContext = `Explain rule violation for ${rec.category}. Message: ${rec.alert_message}`;
-  const synthesizedBase = await ragEngine.generateResponse(promptContext, retrievedChunks);
-
-  let action = '';
-
-  switch (rec.category) {
-    case 'Debt Management':
-    case 'Debt':
-      action = `Pause extra investing and aggressively pay down this balance.`;
-      break;
-    case 'Emergency Fund':
-      action = `Redirect savings to a high-yield cash account until your safety net is full.`;
-      break;
-    default:
-      action = `Review your current allocations and follow the priority action provided.`;
-  }
+  const userQuestion = `Why is there a rule violation for ${rec.category}? Details: ${rec.alert_message}`;
+  
+  const synthesizedResponse = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
 
   return {
     recommendation_id: recId,
     explanation: {
       issue: `Rule Violation: ${rec.alert_message}`,
-      matters: synthesizedBase,
-      action,
+      matters: synthesizedResponse,
+      action: `Review recommendation and follow priority action steps.`,
     },
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
   };
 }
 
 export async function chatWithAdvisor(userId: string, message: string) {
-  const profile = await repo.getClientProfile(userId);
+  const clientContext = await fetchClientFinancialContext(userId);
   const trimmed = message.trim().toLowerCase();
 
   // Small-talk / Greeting Intent Detection
@@ -841,9 +857,8 @@ export async function chatWithAdvisor(userId: string, message: string) {
     };
   }
 
-  const promptContext = `User Profile: Age ${profile?.age ?? 35}. User Question: "${message}"`;
   const retrievedChunks = await ragEngine.semanticSearch(message);
-  const responseText = await ragEngine.generateResponse(promptContext, retrievedChunks);
+  const responseText = await ragEngine.generateResponse(message, retrievedChunks, clientContext);
 
   return {
     reply: responseText,

@@ -83,17 +83,34 @@ export const AIChatWidget: React.FC = () => {
             {chatHistory.map((msg, idx) => (
               <div key={idx} style={{
                 alignSelf: msg.sender === 'user' ? 'flex-end' : 'flex-start',
-                background: msg.sender === 'user' ? 'var(--accent-primary, #007bff)' : '#e9ecef',
-                color: msg.sender === 'user' ? '#fff' : '#333',
+                background: msg.sender === 'user' ? 'var(--accent-primary, #007bff)' : '#f1f5f9',
+                color: msg.sender === 'user' ? '#fff' : '#0f172a',
                 padding: '10px 14px',
                 borderRadius: '16px',
-                maxWidth: '85%',
-                lineHeight: '1.4',
+                maxWidth: '88%',
+                lineHeight: '1.45',
                 wordBreak: 'break-word',
                 borderBottomRightRadius: msg.sender === 'user' ? '4px' : '16px',
                 borderBottomLeftRadius: msg.sender === 'ai' ? '4px' : '16px'
               }}>
-                {msg.text}
+                {msg.sender === 'user' ? msg.text : msg.text.split('\n').map((line, lIdx) => {
+                  if (line.startsWith('## ')) {
+                    return (
+                      <div key={lIdx} style={{ fontWeight: '700', fontSize: '0.95rem', color: '#1e293b', marginTop: lIdx > 0 ? '12px' : '0', marginBottom: '4px', borderBottom: '1px solid #cbd5e1', paddingBottom: '2px' }}>
+                        {line.replace('## ', '')}
+                      </div>
+                    );
+                  }
+                  if (line.startsWith('### ')) {
+                    return (
+                      <div key={lIdx} style={{ fontWeight: '600', fontSize: '0.9rem', color: '#334155', marginTop: lIdx > 0 ? '8px' : '0', marginBottom: '4px' }}>
+                        {line.replace('### ', '')}
+                      </div>
+                    );
+                  }
+                  if (!line.trim()) return <div key={lIdx} style={{ height: '4px' }} />;
+                  return <div key={lIdx} style={{ marginBottom: '3px' }}>{line}</div>;
+                })}
               </div>
             ))}
             {isChatLoading && (

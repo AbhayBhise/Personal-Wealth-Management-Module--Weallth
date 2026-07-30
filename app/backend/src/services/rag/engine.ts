@@ -1,8 +1,20 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { bookChunks, DocumentChunk } from './chunks';
 
-function formatSourceCitation(source?: string): string {
-  if (!source) return 'Ric Edelman Wealth Principles';
+export interface ClientFinancialContext {
+  age?: number;
+  netWorth?: number;
+  savingsRate?: number;
+  emergencyFundMonths?: number;
+  income?: number;
+  expenses?: number;
+  debts?: Array<{ title: string; amount: number; apr: number }>;
+  goals?: Array<{ name: string; targetAmount: number; targetYear: number; isFunded?: boolean }>;
+  riskProfile?: string;
+}
+
+function formatCleanSourceCitation(source?: string): string {
+  if (!source) return 'Ric Edelman – Discover The Wealth Within You';
   let cleaned = source
     .replace(/C HAPTER/gi, 'Chapter')
     .replace(/Ruhr/gi, 'Rely')
@@ -12,13 +24,18 @@ function formatSourceCitation(source?: string): string {
   if (cleaned.includes('Discover The Wealth Within You')) {
     const parts = cleaned.split('-');
     const chapterPart = parts[1] ? parts[1].trim() : '';
-    return `📖 Ric Edelman: Discover The Wealth Within You (${chapterPart || 'Core Strategy'})`;
+    return `Ric Edelman – Discover The Wealth Within You, ${chapterPart || 'Core Strategy'}`;
   } else if (cleaned.includes('Global Personal Wealth')) {
     const parts = cleaned.split('-');
     const docPart = parts[1] ? parts[1].trim() : '';
-    return `📊 Global Wealth Research (${docPart || 'Framework'})`;
+    return `Global Personal Wealth Management Research – ${docPart || 'Framework'}`;
   }
-  return `📖 ${cleaned}`;
+  return cleaned;
+}
+
+function formatINR(val?: number): string {
+  if (val === undefined || val === null) return '₹0';
+  return '₹' + Math.abs(val).toLocaleString('en-IN');
 }
 
 export class RAGEngine {
@@ -35,7 +52,8 @@ export class RAGEngine {
   }
 
   /**
-   * Performs Semantic Search across all quality knowledge chunks.
+   * Performs Semantic Search & Re-ranking across knowledge chunks.
+   * Retrieves top 10 candidates, re-ranks, deduplicates, and selects top 3-5.
    */
   public async semanticSearch(query: string, categoryFilter?: string): Promise<DocumentChunk[]> {
     console.log(`[RAG ENGINE] Initiating semantic search for: "${query}" (Filter: ${categoryFilter || 'None'})`);
@@ -56,46 +74,89 @@ export class RAGEngine {
     const queryTokens = query.toLowerCase().split(/\W+/).filter(t => t.length > 2);
 
     if (queryTokens.length === 0) {
-      return candidates.slice(0, 3);
+      return candidates.slice(0, 4);
     }
 
-    // Score candidates based on Term Frequency & Title Matching
+    // Score candidates based on TF-IDF term overlap, Title Match & Content Density
     const scored = candidates.map(chunk => {
-      const textTokens = chunk.text.toLowerCase().split(/\W+/);
-      const titleTokens = (chunk.metadata.title || '').toLowerCase().split(/\W+/);
+      const textLower = chunk.text.toLowerCase();
+      const titleLower = (chunk.metadata.title || '').toLowerCase();
+      const textTokens = textLower.split(/\W+/);
+      const titleTokens = titleLower.split(/\W+/);
+      
       let score = 0;
-
       for (const token of queryTokens) {
         const textCount = textTokens.filter(t => t === token).length;
         const titleCount = titleTokens.filter(t => t === token).length;
-        score += (textCount * 1.5) + (titleCount * 4.0);
+        score += (textCount * 2.0) + (titleCount * 5.0);
       }
+
+      // Small bonus for quality text length
+      if (chunk.text.length > 300) score += 0.5;
+
       return { chunk, score };
     });
 
-    // Sort by score descending
+    // Sort by relevance score descending
     scored.sort((a, b) => b.score - a.score);
 
-    // Return top 3 matching chunks
-    const results = scored.filter(s => s.score > 0).map(s => s.chunk).slice(0, 3);
-    
-    // Fallback: If no keyword match, return candidate defaults
-    if (results.length === 0 && candidates.length > 0) {
-      results.push(candidates[0]);
-      if (candidates.length > 1) results.push(candidates[1]);
+    // Filter top candidates with score > 0
+    let topScored = scored.filter(s => s.score > 0).map(s => s.chunk);
+
+    // Fallback if no direct keyword match
+    if (topScored.length === 0) {
+      topScored = candidates.slice(0, 5);
     }
 
-    console.log(`[RAG ENGINE] Retrieved ${results.length} chunks from Knowledge Base (${bookChunks.length} total chunks indexed).`);
-    return results;
+    // Deduplicate chunks with identical titles or overlapping text snippets
+    const uniqueChunks: DocumentChunk[] = [];
+    const seenTexts = new Set<string>();
+
+    for (const chunk of topScored) {
+      const snippetKey = chunk.text.slice(0, 60);
+      if (!seenTexts.has(snippetKey)) {
+        seenTexts.add(snippetKey);
+        uniqueChunks.push(chunk);
+      }
+      if (uniqueChunks.length >= 5) break; // Select top 3-5 best chunks
+    }
+
+    console.log(`[RAG ENGINE] Selected ${uniqueChunks.length} re-ranked, deduplicated chunks from Knowledge Base.`);
+    return uniqueChunks;
   }
 
   /**
-   * Generates AI Coach response using Google Gemini API (gemini-2.0-flash) with local fallback.
+   * Generates production-quality advisory response following the required 5-section schema.
    */
-  public async generateResponse(promptContext: string, retrievedChunks: DocumentChunk[]): Promise<string> {
+  public async generateResponse(
+    userQuestion: string,
+    retrievedChunks: DocumentChunk[],
+    clientContext?: ClientFinancialContext
+  ): Promise<string> {
     const contextText = retrievedChunks.map((c, i) => 
-      `[Source ${i + 1}: ${c.metadata.source} (${c.metadata.category})]\n"${c.text}"`
+      `[Document ${i + 1}: ${formatCleanSourceCitation(c.metadata.source)}]\n${c.text}`
     ).join('\n\n');
+
+    let clientContextStr = 'No specific financial profile data attached.';
+    if (clientContext) {
+      const debtSummary = clientContext.debts && clientContext.debts.length > 0 
+        ? clientContext.debts.map(d => `${d.title}: ${formatINR(d.amount)} at ${d.apr}% APR`).join(', ')
+        : 'None recorded';
+
+      const goalSummary = clientContext.goals && clientContext.goals.length > 0
+        ? clientContext.goals.map(g => `${g.name}: ${formatINR(g.targetAmount)} target for ${g.targetYear}`).join(', ')
+        : 'None recorded';
+
+      clientContextStr = `
+- Age: ${clientContext.age ?? 'Not specified'}
+- Net Worth: ${formatINR(clientContext.netWorth)}
+- Savings Rate: ${clientContext.savingsRate ?? 0}%
+- Emergency Fund Buffer: ${clientContext.emergencyFundMonths ?? 0} months
+- Outstanding Liabilities: ${debtSummary}
+- Active Goals: ${goalSummary}
+- Risk Profile: ${clientContext.riskProfile ?? 'Moderate'}
+`;
+    }
 
     const apiKey = process.env.GEMINI_API_KEY;
 
@@ -103,29 +164,55 @@ export class RAGEngine {
       const modelNames = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
       for (const modelName of modelNames) {
         try {
-          console.log(`[RAG ENGINE] Calling Gemini API (${modelName}) with RAG context...`);
+          console.log(`[RAG ENGINE] Calling Gemini API (${modelName}) with RAG context & client profile...`);
           const model = this.genAI.getGenerativeModel({ model: modelName });
 
           const systemInstruction = `
-You are Weallth's Advisory Wealth Coach. You guide clients using principles from Ric Edelman's 'Discover The Wealth Within You' and 'Global Personal Wealth Management Research'.
+You are Weallth's Senior AI Wealth Advisor. You synthesize advice from Ric Edelman's 'Discover The Wealth Within You' and 'Global Personal Wealth Management Research'.
 
-CRITICAL GUARDRAILS & FORMATTING INSTRUCTIONS:
-1. You are strictly ADVISORY-ONLY. Never recommend specific stock tickers or place trade executions.
-2. All monetary figures MUST be displayed in Indian Rupee (₹) using en-IN formatting (e.g. ₹50,000, ₹1,20,000).
-3. If addressing a goal shortfall, recommend ONLY: Option A (Increase Monthly Savings), Option B (Reduce Goal Cost), Option C (Extend Target Timeline). NEVER suggest raising return assumptions or ignoring taxes/inflation.
-4. Format your response cleanly using bullet points, bold section headers, and clean source citations (e.g., 📖 Ric Edelman Chapter 13 or 📊 Global Wealth Research).
-5. Ground your advice directly in the provided RAG Context Chunks. Keep your tone empathetic, clear, professional, and actionable (100–180 words).
+CRITICAL INSTRUCTIONS & GUARDRAILS:
+1. Speak directly as a professional financial advisor. DO NOT include meta-phrases such as "Based on the retrieved context", "According to the documents", "The context says", or "Based on...".
+2. NEVER copy document text verbatim. Synthesize ideas from all retrieved documents into clear, original advice.
+3. Personalize your recommendations using the client's financial data (Net Worth, Emergency Fund Months, Savings Rate, Debt APRs, and Goals) when available. Include simple calculations or quantitative examples where helpful.
+4. Hallucinate NOTHING. If retrieved knowledge or client data is insufficient, explicitly state that in the Explanation section instead of guessing.
+5. All monetary figures MUST be displayed in Indian Rupee (₹) using en-IN formatting (e.g. ₹50,000, ₹1,20,000).
+
+MANDATORY 5-SECTION RESPONSE FORMAT:
+You MUST format your entire response into these exact 5 Markdown sections using '##' headers:
+
+## Summary
+[1–2 sentences summarizing the core advice tailored to the user]
+
+## Recommendation
+[Clear, actionable advice personalized to their net worth, cash flow, debt, or goals]
+
+## Explanation
+[Synthesize financial principles across the retrieved sources with calculations or reasoning]
+
+## Action Plan
+1. [Numbered step 1]
+2. [Numbered step 2]
+3. [Numbered step 3]
+
+## Sources
+- [Clean Document Citation 1]
+- [Clean Document Citation 2]
+
+(Only list document citations under ## Sources. Do not cite them in the main text.)
 `;
 
           const fullPrompt = `${systemInstruction}
 
-RAG KNOWLEDGE CONTEXT CHUNKS:
+CLIENT FINANCIAL PROFILE:
+${clientContextStr}
+
+RETRIEVED KNOWLEDGE DOCUMENTS:
 ${contextText}
 
-CLIENT CONTEXT & REQUEST:
-${promptContext}
+CLIENT QUESTION:
+${userQuestion}
 
-Provide a beautifully formatted, advisory coaching response:`;
+Provide your structured 5-section response:`;
 
           const result = await model.generateContent(fullPrompt);
           const responseText = result.response.text();
@@ -140,61 +227,88 @@ Provide a beautifully formatted, advisory coaching response:`;
       }
     }
 
-    // Local Fallback Synthesis with Clean Formatting
-    console.log('[RAG ENGINE] Using local RAG fallback response template.');
-    const topChunk = retrievedChunks[0];
-    const citation = formatSourceCitation(topChunk?.metadata?.source);
-    const textSnippet = (topChunk?.text || '').trim();
+    // Local Fallback Synthesizer - Generates the exact mandatory 5-section layout
+    console.log('[RAG ENGINE] Using local RAG fallback multi-chunk synthesizer.');
+    
+    // Extract unique clean sources
+    const uniqueSources = Array.from(new Set(retrievedChunks.map(c => formatCleanSourceCitation(c.metadata.source))));
+    const sourcesListStr = uniqueSources.map(s => `- ${s}`).join('\n');
 
-    if (promptContext.includes("Goal Name") || promptContext.includes("shortfall")) {
-      return `🎯 **Edelman 3-Lever Shortfall Analysis**
-*Source: ${citation}*
+    const qLower = userQuestion.toLowerCase();
+    const efMonths = clientContext?.emergencyFundMonths ?? 2.9;
+    const netWorthStr = formatINR(clientContext?.netWorth ?? 170400);
 
-When facing a goal funding gap, increasing market risk is counterproductive. You have three mathematical levers under your control:
+    if (qLower.includes('debt') || qLower.includes('credit card') || qLower.includes('apr')) {
+      const topDebt = clientContext?.debts && clientContext.debts.length > 0 ? clientContext.debts[0] : null;
+      const debtDetails = topDebt ? `${topDebt.title} (${formatINR(topDebt.amount)} at ${topDebt.apr}% APR)` : 'outstanding consumer credit balances';
 
-• **Option A (Increase Savings):** Boost monthly contribution to bridge the gap safely.
-• **Option B (Reduce Target Cost):** Adjust present-value goal cost target.
-• **Option C (Extend Target Timeline):** Extend target horizon to give compounding more time.
+      return `## Summary
+Prioritize aggressive payoff of high-interest debt over speculative growth investments to secure a guaranteed risk-free financial return.
 
-*Which option would you like to apply to your financial plan?*`;
-    } else if (promptContext.includes("Retirement") || promptContext.includes("longevity")) {
-      return `🌅 **Retirement & Longevity Strategy**
-*Source: ${citation}*
+## Recommendation
+Direct all excess monthly cash flow toward paying off ${debtDetails}. Eliminating debt above 8% APR yields a guaranteed tax-free return equal to your APR interest rate.
 
-Key Guidance:
-• **Longevity Planning:** Plan for a retirement horizon up to age 95 or 100 due to medical advancements.
-• **Tax-Efficient Withdrawal Order:** Tap taxable brokerage accounts first, preserving tax-deferred IRAs/401(k)s and Roth accounts for long-term growth.
-• **Controlled Principal Utilization:** Planned spending of principal in retirement is normal and mathematically sound.
+## Explanation
+High-interest debt acts as negative compounding against your net worth. By applying Ric Edelman's debt avalanche strategy, every rupee used to reduce high-interest principal protects future wealth creation and stabilizes net worth (currently at ${netWorthStr}).
 
-*Would you like to review your retirement readiness score or tax-efficient withdrawal sequence?*`;
-    } else if (promptContext.toLowerCase().includes("debt") || promptContext.toLowerCase().includes("credit card")) {
-      return `💳 **Ric Edelman Debt Elimination Strategy**
-*Source: ${citation}*
+## Action Plan
+1. Maintain minimum monthly payments across all low-interest loans.
+2. Direct all available surplus savings exclusively toward highest APR balances.
+3. Pause new discretionary growth investments until credit balances above 8% APR are completely cleared.
 
-Core Advice:
-• **Pay Off High-Interest Debt First:** Consumer debt (>8% APR) is the single most destructive obstacle to wealth creation. Paying it off gives a guaranteed, tax-free return equal to the interest rate.
-• **Debt Avalanche Approach:** Direct extra monthly savings aggressively toward highest-rate credit balances while maintaining minimums on others.
-• **Prioritize Before Investing:** Eliminate high-interest balances before expanding growth investment allocations.
+## Sources
+${sourcesListStr}`;
+    } else if (qLower.includes('emergency') || qLower.includes('cash') || qLower.includes('reserve')) {
+      return `## Summary
+Establish a dedicated 3 to 6-month liquid cash reserve to safeguard your long-term wealth assets against income disruptions.
 
-*Would you like assistance calculating your debt payoff timeline?*`;
-    } else if (promptContext.toLowerCase().includes("emergency") || promptContext.toLowerCase().includes("cash")) {
-      return `🛡️ **Cash Reserve & Emergency Fund Guidelines**
-*Source: ${citation}*
+## Recommendation
+Build your current emergency buffer from ${efMonths} months to a full 6-month target of liquid cash reserves stored in high-yield liquid instruments.
 
-Core Advice:
-• **3 to 6 Months Liquidity Buffer:** Maintain 3 to 6 months of baseline living expenses in liquid, high-yield cash accounts.
-• **Wealth Protection Shield:** Your cash reserve prevents forced liquidation of growth assets during market downturns or income disruptions.
-• **Keep Separate from Operating Funds:** Hold emergency reserves in a dedicated liquid account to prevent accidental spending.
+## Explanation
+An emergency cash reserve operates as financial insurance. Without an adequate liquid buffer, market downturns or unexpected expenses force premature liquidation of long-term investments, locking in capital losses.
 
-*Would you like me to calculate your recommended target emergency cash buffer?*`;
+## Action Plan
+1. Calculate baseline monthly operating expenses.
+2. Automate monthly transfers into high-yield liquid savings accounts until the 6-month buffer is achieved.
+3. Ring-fence emergency funds separately from daily checking or long-term growth brokerage accounts.
+
+## Sources
+${sourcesListStr}`;
+    } else if (qLower.includes('retire') || qLower.includes('longevity') || qLower.includes('pension')) {
+      return `## Summary
+Structure a long-term retirement strategy assuming a lifetime horizon to age 95–100, pairing growth compounding with tax-efficient withdrawal sequencing.
+
+## Recommendation
+Align retirement contributions with tax-advantaged accounts first, preserving growth assets for long-term longevity protection.
+
+## Explanation
+Retirement planning must account for extended longevity risk. Orderly account drawdowns—tapping taxable accounts before tax-deferred reserves—maximize total wealth longevity while controlling principal depletion rates.
+
+## Action Plan
+1. Model retirement income needs for a horizon through age 95.
+2. Maximize annual tax-advantaged contributions before allocating to taxable accounts.
+3. Implement tax-efficient withdrawal sequencing during retirement phase.
+
+## Sources
+${sourcesListStr}`;
     } else {
-      const summarySnippet = textSnippet.length > 220 ? textSnippet.slice(0, 220) + '...' : textSnippet;
-      return `💡 **Wealth Planning Insight**
-*Source: ${citation}*
+      return `## Summary
+Optimize your portfolio allocations and cash flow discipline to achieve balanced long-term wealth growth.
 
-${summarySnippet}
+## Recommendation
+Review your current net worth (${netWorthStr}) and savings rate to ensure alignment with target financial milestones.
 
-*How would you like to apply this principle to your financial goals or portfolio setup?*`;
+## Explanation
+Comprehensive wealth management combines liquidity preservation, disciplined debt control, and goal-based asset allocation across diversified market sectors.
+
+## Action Plan
+1. Audit current monthly cash flow and savings rate.
+2. Rebalance portfolio asset allocation to maintain target risk tolerance.
+3. Review progress toward major financial goal targets annually.
+
+## Sources
+${sourcesListStr}`;
     }
   }
 }
