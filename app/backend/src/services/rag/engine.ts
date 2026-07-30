@@ -1,6 +1,26 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { bookChunks, DocumentChunk } from './chunks';
 
+function formatSourceCitation(source?: string): string {
+  if (!source) return 'Ric Edelman Wealth Principles';
+  let cleaned = source
+    .replace(/C HAPTER/gi, 'Chapter')
+    .replace(/Ruhr/gi, 'Rely')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (cleaned.includes('Discover The Wealth Within You')) {
+    const parts = cleaned.split('-');
+    const chapterPart = parts[1] ? parts[1].trim() : '';
+    return `📖 Ric Edelman: Discover The Wealth Within You (${chapterPart || 'Core Strategy'})`;
+  } else if (cleaned.includes('Global Personal Wealth')) {
+    const parts = cleaned.split('-');
+    const docPart = parts[1] ? parts[1].trim() : '';
+    return `📊 Global Wealth Research (${docPart || 'Framework'})`;
+  }
+  return `📖 ${cleaned}`;
+}
+
 export class RAGEngine {
   private genAI: GoogleGenerativeAI | null = null;
 
@@ -36,7 +56,6 @@ export class RAGEngine {
     const queryTokens = query.toLowerCase().split(/\W+/).filter(t => t.length > 2);
 
     if (queryTokens.length === 0) {
-      // Return general wealth principles if query has no tokens > 2 chars
       return candidates.slice(0, 3);
     }
 
@@ -90,12 +109,12 @@ export class RAGEngine {
           const systemInstruction = `
 You are Weallth's Advisory Wealth Coach. You guide clients using principles from Ric Edelman's 'Discover The Wealth Within You' and 'Global Personal Wealth Management Research'.
 
-CRITICAL GUARDRAILS & INSTRUCTIONS:
+CRITICAL GUARDRAILS & FORMATTING INSTRUCTIONS:
 1. You are strictly ADVISORY-ONLY. Never recommend specific stock tickers or place trade executions.
 2. All monetary figures MUST be displayed in Indian Rupee (₹) using en-IN formatting (e.g. ₹50,000, ₹1,20,000).
 3. If addressing a goal shortfall, recommend ONLY: Option A (Increase Monthly Savings), Option B (Reduce Goal Cost), Option C (Extend Target Timeline). NEVER suggest raising return assumptions or ignoring taxes/inflation.
-4. Ground your advice directly in the provided RAG Context Chunks. Cite the source title in your response when relevant.
-5. Keep your tone empathetic, clear, professional, and actionable (100–180 words).
+4. Format your response cleanly using bullet points, bold section headers, and clean source citations (e.g., 📖 Ric Edelman Chapter 13 or 📊 Global Wealth Research).
+5. Ground your advice directly in the provided RAG Context Chunks. Keep your tone empathetic, clear, professional, and actionable (100–180 words).
 `;
 
           const fullPrompt = `${systemInstruction}
@@ -106,7 +125,7 @@ ${contextText}
 CLIENT CONTEXT & REQUEST:
 ${promptContext}
 
-Provide a concise, advisory coaching response:`;
+Provide a beautifully formatted, advisory coaching response:`;
 
           const result = await model.generateContent(fullPrompt);
           const responseText = result.response.text();
@@ -121,48 +140,61 @@ Provide a concise, advisory coaching response:`;
       }
     }
 
-    // Local Fallback Synthesis
+    // Local Fallback Synthesis with Clean Formatting
     console.log('[RAG ENGINE] Using local RAG fallback response template.');
     const topChunk = retrievedChunks[0];
-    const sourceTitle = topChunk?.metadata?.source || 'Ric Edelman Wealth Principles';
-    const textSnippet = topChunk?.text || '';
+    const citation = formatSourceCitation(topChunk?.metadata?.source);
+    const textSnippet = (topChunk?.text || '').trim();
 
     if (promptContext.includes("Goal Name") || promptContext.includes("shortfall")) {
-      return `We have analyzed your goal shortfall based on Ric Edelman's methodology [${sourceTitle}]:
+      return `🎯 **Edelman 3-Lever Shortfall Analysis**
+*Source: ${citation}*
 
-Key Principles:
-- When facing a goal funding shortfall, taking on higher market risk is counterproductive.
-- You have three mathematical levers under your control:
-  1. Option A: Increase your monthly savings rate.
-  2. Option B: Reduce your present-value goal cost target.
-  3. Option C: Extend your target timeline to allow more compounding time.`;
+When facing a goal funding gap, increasing market risk is counterproductive. You have three mathematical levers under your control:
+
+• **Option A (Increase Savings):** Boost monthly contribution to bridge the gap safely.
+• **Option B (Reduce Target Cost):** Adjust present-value goal cost target.
+• **Option C (Extend Target Timeline):** Extend target horizon to give compounding more time.
+
+*Which option would you like to apply to your financial plan?*`;
     } else if (promptContext.includes("Retirement") || promptContext.includes("longevity")) {
-      return `Based on Ric Edelman's retirement planning principles [${sourceTitle}]:
+      return `🌅 **Retirement & Longevity Strategy**
+*Source: ${citation}*
 
 Key Guidance:
-1. Longevity Risk: Plan for a retirement lifetime up to age 95 or 100 due to medical advancements.
-2. Withdrawal Sequence: Tap taxable brokerage accounts first, preserving tax-deferred IRAs/401(k)s and Roth accounts for long-term growth.
-3. Principal Spending: Gradual, controlled spending of principal in retirement is normal and mathematically expected.`;
+• **Longevity Planning:** Plan for a retirement horizon up to age 95 or 100 due to medical advancements.
+• **Tax-Efficient Withdrawal Order:** Tap taxable brokerage accounts first, preserving tax-deferred IRAs/401(k)s and Roth accounts for long-term growth.
+• **Controlled Principal Utilization:** Planned spending of principal in retirement is normal and mathematically sound.
+
+*Would you like to review your retirement readiness score or tax-efficient withdrawal sequence?*`;
     } else if (promptContext.toLowerCase().includes("debt") || promptContext.toLowerCase().includes("credit card")) {
-      return `Based on Ric Edelman's debt management methodology [${sourceTitle}]:
+      return `💳 **Ric Edelman Debt Elimination Strategy**
+*Source: ${citation}*
 
 Core Advice:
-- High-interest consumer debt (>8% APR) is the single most destructive force in personal wealth accumulation.
-- Eliminating high-interest debt provides a guaranteed risk-free return equal to the interest rate.
-- Prioritize aggressive debt elimination before expanding growth investment allocations.`;
+• **Pay Off High-Interest Debt First:** Consumer debt (>8% APR) is the single most destructive obstacle to wealth creation. Paying it off gives a guaranteed, tax-free return equal to the interest rate.
+• **Debt Avalanche Approach:** Direct extra monthly savings aggressively toward highest-rate credit balances while maintaining minimums on others.
+• **Prioritize Before Investing:** Eliminate high-interest balances before expanding growth investment allocations.
+
+*Would you like assistance calculating your debt payoff timeline?*`;
     } else if (promptContext.toLowerCase().includes("emergency") || promptContext.toLowerCase().includes("cash")) {
-      return `Based on Ric Edelman's cash reserve guidelines [${sourceTitle}]:
+      return `🛡️ **Cash Reserve & Emergency Fund Guidelines**
+*Source: ${citation}*
 
 Core Advice:
-- Maintain 3 to 6 months of living expenses in liquid, high-yield cash accounts.
-- Your emergency fund is insurance to prevent forced selling of growth investments during income disruptions.`;
+• **3 to 6 Months Liquidity Buffer:** Maintain 3 to 6 months of baseline living expenses in liquid, high-yield cash accounts.
+• **Wealth Protection Shield:** Your cash reserve prevents forced liquidation of growth assets during market downturns or income disruptions.
+• **Keep Separate from Operating Funds:** Hold emergency reserves in a dedicated liquid account to prevent accidental spending.
+
+*Would you like me to calculate your recommended target emergency cash buffer?*`;
     } else {
-      return `Based on our wealth management research [${sourceTitle}]:
+      const summarySnippet = textSnippet.length > 220 ? textSnippet.slice(0, 220) + '...' : textSnippet;
+      return `💡 **Wealth Planning Insight**
+*Source: ${citation}*
 
-Key Insight:
-${textSnippet.slice(0, 240)}...
+${summarySnippet}
 
-How would you like to apply this to your current financial goals or portfolio setup?`;
+*How would you like to apply this principle to your financial goals or portfolio setup?*`;
     }
   }
 }
