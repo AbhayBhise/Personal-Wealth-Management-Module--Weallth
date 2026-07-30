@@ -81,7 +81,7 @@ export class RAGEngine {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (this.genAI && apiKey && apiKey.trim().length > 0) {
-      const modelNames = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+      const modelNames = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
       for (const modelName of modelNames) {
         try {
           console.log(`[RAG ENGINE] Calling Gemini API (${modelName}) with RAG context...`);

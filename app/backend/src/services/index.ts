@@ -820,21 +820,21 @@ export async function chatWithAdvisor(userId: string, message: string) {
   const farewells = ['bye', 'by', 'goodbye', 'see you', 'talk to you later', 'take care'];
   const grateful = ['thanks', 'thank you', 'thx', 'appreciate it'];
 
-  if (greetings.some(g => trimmed === g || trimmed.startsWith(g + ' ') || trimmed.startsWith(g + '!'))) {
+  if (greetings.some(g => trimmed.includes(g))) {
     return {
       reply: `Hello! I am your Weallth AI Advisor, powered by Ric Edelman's planning methodology and global wealth management research. How can I assist you with your financial plan today? You can ask me about emergency funds, debt management, retirement planning, goal shortfalls, or portfolio allocations.`,
       disclaimer: 'Advisory simulation only. Not financial advice.'
     };
   }
 
-  if (farewells.some(f => trimmed === f || trimmed.startsWith(f + ' '))) {
+  if (farewells.some(f => trimmed.includes(f))) {
     return {
       reply: `Goodbye! Stay disciplined with your savings rate and wealth goals. Feel free to reach out whenever you want to update your plan.`,
       disclaimer: 'Advisory simulation only. Not financial advice.'
     };
   }
 
-  if (grateful.some(t => trimmed === t || trimmed.startsWith(t + ' '))) {
+  if (grateful.some(t => trimmed.includes(t))) {
     return {
       reply: `You're very welcome! Let me know if you have any other questions about your wealth health score or portfolio strategy.`,
       disclaimer: 'Advisory simulation only. Not financial advice.'
