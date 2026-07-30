@@ -109,15 +109,18 @@ export const AIChatWidget: React.FC = () => {
               type="text" 
               value={input}
               onChange={e => setInput(e.target.value)}
-              placeholder="Type a message..."
+              placeholder="Ask a question..."
               style={{
                 flex: 1,
-                border: '1px solid var(--border-color, #ccc)',
+                border: '1px solid #ccc',
                 borderRadius: '20px',
                 padding: '8px 16px',
                 outline: 'none',
-                background: 'var(--bg-default, #fff)',
-                color: 'var(--text-primary, #000)'
+                background: '#ffffff',
+                color: '#000000',
+                WebkitTextFillColor: '#000000',
+                fontSize: '14px',
+                fontWeight: '500'
               }}
             />
             <button 
