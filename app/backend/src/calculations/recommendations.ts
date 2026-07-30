@@ -51,7 +51,7 @@ export function generateRecommendations(snapshot: FinancialSnapshot): Omit<Recom
     recs.push({
       category: 'Emergency Fund',
       priority: 'Critical',
-      alert_message: `Your emergency fund covers only ${efMonthsCovered.toFixed(1)} months of expenses. Your target is 6 months (₹${snapshot.emergencyFundTarget.toLocaleString()}). You need ₹${gap.toLocaleString()} more.`,
+      alert_message: `Your emergency fund covers only ${efMonthsCovered.toFixed(1)} months of expenses. Your target is 6 months (₹${Math.round(snapshot.emergencyFundTarget).toLocaleString()}). You need ₹${Math.round(gap).toLocaleString()} more.`,
       reason: 'The Edelman methodology requires a minimum 3–6 month emergency buffer before allocating to growth assets. Without it, you risk liquidating long-term investments at a loss during income disruptions.',
       expected_benefit: 'Eliminates forced selling of growth assets during financial emergencies.',
       action: 'Open a high-yield savings account and automate monthly transfers until the emergency fund target is reached.',
