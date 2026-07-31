@@ -879,7 +879,8 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
       confidenceScore: responseObj.confidenceScore,
       intent: responseObj.intent,
       latencyMs: responseObj.latencyMs,
-      retrievedChunkIds: retrievalResult.chunks.map(c => c.id)
+      retrievedChunkIds: retrievalResult.chunks.map(c => c.id),
+      sources: responseObj.sources
     },
     disclaimer: 'Advisory simulation only. Not financial advice.'
   };

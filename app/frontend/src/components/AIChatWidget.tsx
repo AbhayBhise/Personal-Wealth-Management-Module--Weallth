@@ -166,6 +166,9 @@ export const AIChatWidget: React.FC = () => {
                             <div>🎯 Intent: {msg.diagnostics.intent}</div>
                             <div>📊 Confidence: {msg.diagnostics.confidenceScore}</div>
                             <div>📚 Chunks: {(msg.diagnostics.retrievedChunkIds || []).join(', ')}</div>
+                            {msg.diagnostics.sources && msg.diagnostics.sources.length > 0 && (
+                              <div>📖 Sources: {msg.diagnostics.sources.join('; ')}</div>
+                            )}
                           </div>
                         )}
                       </div>
