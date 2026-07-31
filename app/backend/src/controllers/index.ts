@@ -181,10 +181,10 @@ export const getAIRecommendationExplanation = asyncHandler(async (req: Request, 
 
 export const postAIChat = asyncHandler(async (req: Request, res: Response) => {
   const { userId } = req.params;
-  const { message } = req.body;
+  const { message, chatHistory } = req.body;
   if (!message) {
     return res.status(400).json({ error: 'Message is required.' });
   }
-  const data = await svc.chatWithAdvisor(userId, message);
+  const data = await svc.chatWithAdvisor(userId, message, chatHistory || []);
   return res.status(200).json(data);
 });

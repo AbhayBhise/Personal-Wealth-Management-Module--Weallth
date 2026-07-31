@@ -37,11 +37,11 @@ export async function dismissRecommendation(userId: string, recId: string) {
   return res.json();
 }
 
-export async function sendAIChatMessage(userId: string, message: string) {
+export async function sendAIChatMessage(userId: string, message: string, chatHistory: any[] = []) {
   const res = await fetch(`${API_BASE}/users/${userId}/ai/chat`, {
     method: 'POST',
     headers: getHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ message, chatHistory }),
   });
   if (!res.ok) throw new Error('Failed to send AI chat message');
   return res.json();

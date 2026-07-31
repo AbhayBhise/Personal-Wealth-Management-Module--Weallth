@@ -31,7 +31,7 @@ interface AppState {
   dismissRecommendation: (recId: string) => Promise<void>;
 
   // ─── Chat State ───────────────────────────────────────────────────────────
-  chatHistory: { sender: 'user' | 'ai', text: string }[];
+  chatHistory: { sender: 'user' | 'ai', text: string, suggestedFollowUps?: string[], diagnostics?: any }[];
   isChatOpen: boolean;
   isChatLoading: boolean;
   toggleChat: () => void;
@@ -152,9 +152,17 @@ export const useAppStore = create<AppState>()(
     set({ chatHistory: newHistory, isChatLoading: true });
     
     try {
-      const response = await sendAIChatMessage(user.id, message);
+      const response = await sendAIChatMessage(user.id, message, chatHistory);
       set({ 
-        chatHistory: [...newHistory, { sender: 'ai' as const, text: response.reply }],
+        chatHistory: [
+          ...newHistory,
+          {
+            sender: 'ai' as const,
+            text: response.reply,
+            suggestedFollowUps: response.suggestedFollowUps,
+            diagnostics: response.diagnostics,
+          }
+        ],
         isChatLoading: false
       });
     } catch (err) {

@@ -811,23 +811,23 @@ export async function getAIRecommendationExplanation(userId: string, recId: stri
 
   const clientContext = await fetchClientFinancialContext(userId);
   const categoryFilter = rec.category === "Debt Management" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
-  const retrievedChunks = await ragEngine.semanticSearch(rec.category, categoryFilter);
+  const retrievalResult = await ragEngine.semanticSearch(rec.category, categoryFilter);
   const userQuestion = `Why is there a rule violation for ${rec.category}? Details: ${rec.alert_message}`;
   
-  const synthesizedResponse = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
+  const synthesizedObj = await ragEngine.generateResponse(userQuestion, retrievalResult, clientContext);
 
   return {
     recommendation_id: recId,
     explanation: {
       issue: `Rule Violation: ${rec.alert_message}`,
-      matters: synthesizedResponse,
+      matters: synthesizedObj.reply,
       action: `Review recommendation and follow priority action steps.`,
     },
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
   };
 }
 
-export async function chatWithAdvisor(userId: string, message: string) {
+export async function chatWithAdvisor(userId: string, message: string, chatHistory: any[] = []) {
   const clientContext = await fetchClientFinancialContext(userId);
   const trimmed = message.trim().toLowerCase();
 
@@ -839,6 +839,12 @@ export async function chatWithAdvisor(userId: string, message: string) {
   if (greetings.some(g => trimmed.includes(g))) {
     return {
       reply: `Hello! I am your Weallth AI Advisor, powered by Ric Edelman's planning methodology and global wealth management research. How can I assist you with your financial plan today? You can ask me about emergency funds, debt management, retirement planning, goal shortfalls, or portfolio allocations.`,
+      suggestedFollowUps: [
+        'How can I grow my net worth?',
+        'What is the Edelman 7-Pillar Methodology?',
+        'How much emergency fund do I need?',
+        'Should I pay debt or invest first?'
+      ],
       disclaimer: 'Advisory simulation only. Not financial advice.'
     };
   }
@@ -846,6 +852,7 @@ export async function chatWithAdvisor(userId: string, message: string) {
   if (farewells.some(f => trimmed.includes(f))) {
     return {
       reply: `Goodbye! Stay disciplined with your savings rate and wealth goals. Feel free to reach out whenever you want to update your plan.`,
+      suggestedFollowUps: [],
       disclaimer: 'Advisory simulation only. Not financial advice.'
     };
   }
@@ -853,15 +860,27 @@ export async function chatWithAdvisor(userId: string, message: string) {
   if (grateful.some(t => trimmed.includes(t))) {
     return {
       reply: `You're very welcome! Let me know if you have any other questions about your wealth health score or portfolio strategy.`,
+      suggestedFollowUps: [
+        'How is my Wealth Health Score calculated?',
+        'How can I improve my lowest scoring pillar?',
+        'What should I prioritize next?'
+      ],
       disclaimer: 'Advisory simulation only. Not financial advice.'
     };
   }
 
-  const retrievedChunks = await ragEngine.semanticSearch(message);
-  const responseText = await ragEngine.generateResponse(message, retrievedChunks, clientContext);
+  const retrievalResult = await ragEngine.semanticSearch(message);
+  const responseObj = await ragEngine.generateResponse(message, retrievalResult, clientContext, chatHistory);
 
   return {
-    reply: responseText,
+    reply: responseObj.reply,
+    suggestedFollowUps: responseObj.suggestedFollowUps,
+    diagnostics: {
+      confidenceScore: responseObj.confidenceScore,
+      intent: responseObj.intent,
+      latencyMs: responseObj.latencyMs,
+      retrievedChunkIds: retrievalResult.chunks.map(c => c.id)
+    },
     disclaimer: 'Advisory simulation only. Not financial advice.'
   };
 }
