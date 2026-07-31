@@ -19,6 +19,7 @@ const PILLAR_LABELS: Record<string, string> = {
   score_portfolio_drift: '⚖️ Portfolio Drift',
   score_retirement_readiness: '🏖️ Retirement',
   score_insurance_protection: '🩺 Insurance',
+  score_estate_planning: '📜 Estate Plan',
 };
 
 function stripMarkdownText(text: string): string {
