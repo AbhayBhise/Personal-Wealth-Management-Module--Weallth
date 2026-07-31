@@ -212,7 +212,12 @@ export default function Goals() {
           const fundedPct = goal.target_amount > 0
             ? Math.min(100, Math.round((goal.already_saved / goal.target_amount) * 100)) : 0;
 
-          const rawCoachMsg = coachMessages[goal.id]?.message || '';
+          const coachMsgObj = coachMessages[goal.id]?.message;
+          const rawCoachMsg = typeof coachMsgObj === 'string'
+            ? coachMsgObj
+            : (coachMsgObj && typeof coachMsgObj === 'object' && 'reply' in coachMsgObj)
+            ? (coachMsgObj as any).reply
+            : '';
           const cleanCoachSummary = stripMarkdown(rawCoachMsg).slice(0, 230) + (rawCoachMsg.length > 230 ? '...' : '');
 
           return (
@@ -468,8 +473,23 @@ export default function Goals() {
 
             {/* Modal Body: 5-Section Render */}
             <div style={{ padding: '1.6rem', overflowY: 'auto', flex: 1, color: '#e2e8f0', lineHeight: 1.6, fontSize: '0.9rem' }}>
-              {activeModalCoachMsg ? (
-                activeModalCoachMsg.message.split('\n').map((line, idx) => {
+              {(() => {
+                const modalCoachMsgObj = activeModalCoachMsg?.message;
+                const modalCoachMsgStr = typeof modalCoachMsgObj === 'string'
+                  ? modalCoachMsgObj
+                  : (modalCoachMsgObj && typeof modalCoachMsgObj === 'object' && 'reply' in modalCoachMsgObj)
+                  ? (modalCoachMsgObj as any).reply
+                  : '';
+
+                if (!modalCoachMsgStr) {
+                  return (
+                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
+                      Loading AI Goal Coach insights...
+                    </div>
+                  );
+                }
+
+                return modalCoachMsgStr.split('\n').map((line: string, idx: number) => {
                   if (line.startsWith('## ')) {
                     return (
                       <h4 key={idx} style={{
@@ -483,12 +503,8 @@ export default function Goals() {
                   }
                   if (!line.trim()) return <div key={idx} style={{ height: '6px' }} />;
                   return <div key={idx} style={{ marginBottom: '0.4rem' }}>{line}</div>;
-                })
-              ) : (
-                <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
-                  Loading AI Goal Coach insights...
-                </div>
-              )}
+                });
+              })()}
             </div>
 
             {/* Modal Footer */}

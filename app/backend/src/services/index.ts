@@ -776,11 +776,11 @@ export async function getAIGoalCoachMessage(userId: string, goalId: string) {
   const retrievedChunks = await ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goal");
   const userQuestion = `How should I address the shortfall for my goal "${goal.name}" (Shortfall: ₹${goal.shortfall.toLocaleString()}, Monthly contribution: ₹${goal.monthly_contribution.toLocaleString()})?`;
   
-  const synthesizedResponse = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
+  const synthesizedObj = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
 
   return {
     goal_id: goalId,
-    message: synthesizedResponse,
+    message: synthesizedObj.reply,
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
   };
 }
@@ -790,14 +790,14 @@ export async function getAIRetirementCoachMessage(userId: string) {
   const retrievedChunks = await ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
   const userQuestion = `How should I plan my retirement roadmap, handle longevity risk, and order account withdrawals?`;
   
-  const synthesizedResponse = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
+  const synthesizedObj = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
   
   return {
     user_id: userId,
     sections: [
       {
         title: 'Retirement Roadmap via Gemini RAG',
-        content: synthesizedResponse,
+        content: synthesizedObj.reply,
       }
     ],
     disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
