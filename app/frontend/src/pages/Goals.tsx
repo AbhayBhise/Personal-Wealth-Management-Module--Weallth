@@ -109,18 +109,10 @@ export default function Goals() {
     fetch(`${API_BASE}/users/${user.id}/goals`)
       .then(res => res.json())
       .then(data => {
-        // Deduplicate goals by name
-        const uniqueGoalsMap = new Map<string, Goal>();
-        data.forEach((g: Goal) => {
-          if (!uniqueGoalsMap.has(g.name)) {
-            uniqueGoalsMap.set(g.name, g);
-          }
-        });
-        const uniqueGoals = Array.from(uniqueGoalsMap.values());
-        setGoals(uniqueGoals);
+        setGoals(data);
         setLoading(false);
 
-        uniqueGoals.forEach((g: Goal) => {
+        data.forEach((g: Goal) => {
           if (g.shortfall > 0) {
             fetch(`${API_BASE}/users/${user.id}/goals/${g.id}/options`)
               .then(r => r.ok ? r.json() : null)
@@ -196,8 +188,23 @@ export default function Goals() {
         </div>
       </div>
 
+      {/* Responsive Grid Styles */}
+      <style>{`
+        .goals-responsive-grid {
+          display: grid;
+          grid-template-columns: repeat(2, 1fr);
+          gap: 1.75rem;
+          width: 100%;
+        }
+        @media (max-width: 900px) {
+          .goals-responsive-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+
       {/* Grid Layout of Themed Goal Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(520px, 1fr))', gap: '1.75rem' }}>
+      <div className="goals-responsive-grid">
         {goals.map(goal => {
           const theme = CATEGORY_THEMES[goal.category] || CATEGORY_THEMES.Default;
           const priority = PRIORITY_BADGES[goal.priority] || PRIORITY_BADGES.Medium;

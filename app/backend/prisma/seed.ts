@@ -176,6 +176,76 @@ async function main() {
     },
   });
 
+  await prisma.goal.create({
+    data: {
+      userId: DEMO_CLIENT_ID,
+      name: 'Children Education Fund',
+      category: 'Education',
+      priority: 'High',
+      targetAmount: 60000,
+      targetYear: 2036,
+      alreadySaved: 15000,
+      monthlyContribution: 350,
+      shortfall: 17364,
+    },
+  });
+
+  await prisma.goal.create({
+    data: {
+      userId: DEMO_CLIENT_ID,
+      name: 'New Car Purchase',
+      category: 'Purchase',
+      priority: 'Medium',
+      targetAmount: 30000,
+      targetYear: 2028,
+      alreadySaved: 5000,
+      monthlyContribution: 300,
+      shortfall: 18398,
+    },
+  });
+
+  await prisma.goal.create({
+    data: {
+      userId: DEMO_CLIENT_ID,
+      name: 'Retirement Wealth Fund',
+      category: 'Retirement',
+      priority: 'Medium',
+      targetAmount: 1200000,
+      targetYear: 2055,
+      alreadySaved: 100000,
+      monthlyContribution: 1000,
+      shortfall: 1904788,
+    },
+  });
+
+  await prisma.goal.create({
+    data: {
+      userId: DEMO_CLIENT_ID,
+      name: 'Home Renovation Goal',
+      category: 'Purchase',
+      priority: 'Low',
+      targetAmount: 40000,
+      targetYear: 2026,
+      alreadySaved: 35000,
+      monthlyContribution: 600,
+      shortfall: 0,
+    },
+  });
+
+  await prisma.goal.create({
+    data: {
+      userId: DEMO_CLIENT_ID,
+      name: 'Annual Family Vacation',
+      category: 'General Savings',
+      priority: 'Low',
+      targetAmount: 15000,
+      targetYear: 2026,
+      alreadySaved: 15000,
+      monthlyContribution: 400,
+      shortfall: 0,
+    },
+  });
+
   await prisma.recommendationAlert.create({
     data: {
       userId: DEMO_CLIENT_ID,
