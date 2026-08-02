@@ -114,6 +114,15 @@ export default function Goals() {
     monthly_contribution: ''
   });
   const [submittingGoal, setSubmittingGoal] = useState(false);
+  const [openMenuGoalId, setOpenMenuGoalId] = useState<string | null>(null);
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenuGoalId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   const handleCreateGoal = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,9 +191,56 @@ export default function Goals() {
 
       if (!res.ok) throw new Error('Failed to delete goal');
 
-      setGoals(prev => prev.filter(g => g.id !== goalId));
     } catch (err) {
       console.error('Error deleting goal:', err);
+    }
+  };
+
+  const handleUpdateGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !editingGoal) return;
+
+    setSubmittingEdit(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.id}/goals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: editingGoal.id,
+          name: editingGoal.name,
+          category: editingGoal.category,
+          priority: editingGoal.priority,
+          target_amount: Number(editingGoal.target_amount),
+          target_year: Number(editingGoal.target_year),
+          already_saved: Number(editingGoal.already_saved || 0),
+          monthly_contribution: Number(editingGoal.monthly_contribution || 0),
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to update goal');
+      const updatedGoal: Goal = await res.json();
+
+      setGoals(prev => prev.map(g => g.id === updatedGoal.id ? updatedGoal : g));
+      setEditingGoal(null);
+
+      // Refresh Edelman options & coach message for updated goal
+      if (updatedGoal.shortfall > 0) {
+        fetch(`${API_BASE}/users/${user.id}/goals/${updatedGoal.id}/options`)
+          .then(r => r.ok ? r.json() : null)
+          .then(opt => {
+            if (opt) setOptions(prev => ({ ...prev, [updatedGoal.id]: opt }));
+          });
+
+        fetch(`${API_BASE}/users/${user.id}/goals/${updatedGoal.id}/coach`)
+          .then(r => r.ok ? r.json() : null)
+          .then(msg => {
+            if (msg) setCoachMessages(prev => ({ ...prev, [updatedGoal.id]: msg }));
+          });
+      }
+    } catch (err) {
+      console.error('Error updating goal:', err);
+    } finally {
+      setSubmittingEdit(false);
     }
   };
 
@@ -356,26 +412,89 @@ export default function Goals() {
                   <span style={{ fontSize: '0.82rem', color: '#94a3b8', background: 'rgba(15,23,42,0.5)', padding: '0.25rem 0.65rem', borderRadius: '8px' }}>
                     Target: {goal.target_year}
                   </span>
-                  <button
-                    onClick={() => handleDeleteGoal(goal.id, goal.name)}
-                    title="Delete Goal"
-                    style={{
-                      background: 'rgba(225, 29, 72, 0.15)',
-                      border: '1px solid rgba(225, 29, 72, 0.3)',
-                      color: '#f43f5e',
-                      borderRadius: '8px',
-                      padding: '0.25rem 0.6rem',
-                      fontSize: '0.78rem',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.3rem',
-                      fontWeight: 600,
-                      transition: 'all 0.2s ease',
-                    }}
-                  >
-                    <span>🗑️</span> Delete
-                  </button>
+
+                  {/* Three-Dot Menu */}
+                  <div style={{ position: 'relative' }}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuGoalId(openMenuGoalId === goal.id ? null : goal.id);
+                      }}
+                      title="Goal Actions"
+                      style={{
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        border: '1px solid rgba(255, 255, 255, 0.12)',
+                        color: '#94a3b8',
+                        borderRadius: '8px',
+                        width: '32px',
+                        height: '32px',
+                        cursor: 'pointer',
+                        fontSize: '1.2rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      ⋮
+                    </button>
+
+                    {openMenuGoalId === goal.id && (
+                      <div 
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute', top: '115%', right: 0, zIndex: 100,
+                          background: '#1e293b', border: '1px solid rgba(255, 255, 255, 0.15)',
+                          borderRadius: '10px', boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                          padding: '0.4rem', minWidth: '160px', display: 'flex', flexDirection: 'column', gap: '0.2rem'
+                        }}
+                      >
+                        <button
+                          onClick={() => {
+                            setOpenMenuGoalId(null);
+                            setEditingGoal(goal);
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.5rem 0.8rem',
+                            background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.84rem',
+                            borderRadius: '6px', cursor: 'pointer', textAlign: 'left', width: '100%', fontWeight: 500
+                          }}
+                        >
+                          <span>✏️</span> Edit Goal
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setOpenMenuGoalId(null);
+                            setSelectedGoalIdModal(goal.id);
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.5rem 0.8rem',
+                            background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.84rem',
+                            borderRadius: '6px', cursor: 'pointer', textAlign: 'left', width: '100%', fontWeight: 500
+                          }}
+                        >
+                          <span>📊</span> View Insights
+                        </button>
+
+                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '0.2rem 0' }} />
+
+                        <button
+                          onClick={() => {
+                            setOpenMenuGoalId(null);
+                            handleDeleteGoal(goal.id, goal.name);
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.5rem 0.8rem',
+                            background: 'rgba(225, 29, 72, 0.12)', border: 'none', color: '#f43f5e', fontSize: '0.84rem',
+                            borderRadius: '6px', cursor: 'pointer', textAlign: 'left', width: '100%', fontWeight: 600
+                          }}
+                        >
+                          <span>🗑️</span> Delete Goal
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -822,6 +941,195 @@ export default function Goals() {
                   }}
                 >
                   {submittingGoal ? 'Saving Goal...' : 'Add Financial Goal'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EDIT GOAL MODAL ─────────────────────────────────────────────────── */}
+      {editingGoal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: '1.5rem'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #1e293b 0%, #0f172a 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.15)', borderRadius: '16px',
+            width: '100%', maxWidth: '540px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.25rem 1.5rem', background: 'rgba(255,255,255,0.03)',
+              borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '1.4rem' }}>✏️</span>
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.15rem', fontWeight: 700 }}>
+                  Edit Financial Goal
+                </h3>
+              </div>
+              <button 
+                onClick={() => setEditingGoal(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleUpdateGoal} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  GOAL NAME *
+                </label>
+                <input 
+                  type="text"
+                  required
+                  value={editingGoal.name}
+                  onChange={e => setEditingGoal(prev => prev ? ({ ...prev, name: e.target.value }) : null)}
+                  style={{
+                    width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    CATEGORY
+                  </label>
+                  <select 
+                    value={editingGoal.category}
+                    onChange={e => setEditingGoal(prev => prev ? ({ ...prev, category: e.target.value as any }) : null)}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  >
+                    <option value="Education">Education 🎓</option>
+                    <option value="Retirement">Retirement ☂️</option>
+                    <option value="Purchase">Purchase 🚗</option>
+                    <option value="Emergency Fund">Emergency Fund 🛡️</option>
+                    <option value="Other">Other 🎯</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    PRIORITY
+                  </label>
+                  <select 
+                    value={editingGoal.priority}
+                    onChange={e => setEditingGoal(prev => prev ? ({ ...prev, priority: e.target.value as any }) : null)}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  >
+                    <option value="High">High Priority</option>
+                    <option value="Medium">Medium Priority</option>
+                    <option value="Low">Low Priority</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    TARGET AMOUNT ({currency === 'INR' ? '₹' : '$'}) *
+                  </label>
+                  <input 
+                    type="number"
+                    required
+                    min="1"
+                    value={editingGoal.target_amount}
+                    onChange={e => setEditingGoal(prev => prev ? ({ ...prev, target_amount: Number(e.target.value) }) : null)}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    TARGET YEAR *
+                  </label>
+                  <input 
+                    type="number"
+                    required
+                    min={new Date().getFullYear()}
+                    max={2100}
+                    value={editingGoal.target_year}
+                    onChange={e => setEditingGoal(prev => prev ? ({ ...prev, target_year: Number(e.target.value) }) : null)}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    ALREADY SAVED ({currency === 'INR' ? '₹' : '$'})
+                  </label>
+                  <input 
+                    type="number"
+                    min="0"
+                    value={editingGoal.already_saved}
+                    onChange={e => setEditingGoal(prev => prev ? ({ ...prev, already_saved: Number(e.target.value) }) : null)}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    MONTHLY SAVINGS ({currency === 'INR' ? '₹' : '$'})
+                  </label>
+                  <input 
+                    type="number"
+                    min="0"
+                    value={editingGoal.monthly_contribution}
+                    onChange={e => setEditingGoal(prev => prev ? ({ ...prev, monthly_contribution: Number(e.target.value) }) : null)}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.8rem', marginTop: '0.8rem' }}>
+                <button 
+                  type="button"
+                  onClick={() => setEditingGoal(null)}
+                  style={{
+                    padding: '0.6rem 1.25rem', background: 'transparent', color: '#94a3b8',
+                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={submittingEdit}
+                  style={{
+                    padding: '0.6rem 1.4rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff',
+                    border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)', opacity: submittingEdit ? 0.7 : 1
+                  }}
+                >
+                  {submittingEdit ? 'Updating Goal...' : 'Save Changes'}
                 </button>
               </div>
             </form>
