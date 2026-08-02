@@ -171,6 +171,23 @@ export default function Goals() {
     }
   };
 
+  const handleDeleteGoal = async (goalId: string, goalName: string) => {
+    if (!user) return;
+    if (!window.confirm(`Are you sure you want to delete "${goalName}"?`)) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.id}/goals/${goalId}`, {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) throw new Error('Failed to delete goal');
+
+      setGoals(prev => prev.filter(g => g.id !== goalId));
+    } catch (err) {
+      console.error('Error deleting goal:', err);
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     fetch(`${API_BASE}/users/${user.id}/goals`)
@@ -335,9 +352,31 @@ export default function Goals() {
                   </div>
                 </div>
 
-                <span style={{ fontSize: '0.82rem', color: '#94a3b8', background: 'rgba(15,23,42,0.5)', padding: '0.25rem 0.65rem', borderRadius: '8px' }}>
-                  Target: {goal.target_year}
-                </span>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <span style={{ fontSize: '0.82rem', color: '#94a3b8', background: 'rgba(15,23,42,0.5)', padding: '0.25rem 0.65rem', borderRadius: '8px' }}>
+                    Target: {goal.target_year}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteGoal(goal.id, goal.name)}
+                    title="Delete Goal"
+                    style={{
+                      background: 'rgba(225, 29, 72, 0.15)',
+                      border: '1px solid rgba(225, 29, 72, 0.3)',
+                      color: '#f43f5e',
+                      borderRadius: '8px',
+                      padding: '0.25rem 0.6rem',
+                      fontSize: '0.78rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.3rem',
+                      fontWeight: 600,
+                      transition: 'all 0.2s ease',
+                    }}
+                  >
+                    <span>🗑️</span> Delete
+                  </button>
+                </div>
               </div>
 
               {/* Progress Section */}
