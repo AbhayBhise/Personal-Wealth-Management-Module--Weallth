@@ -6,6 +6,7 @@ import { getAIModule } from './registry';
 import { cleanAIResponseOutput } from './cleaner';
 import { aiCache } from './cache';
 import { aiAnalytics } from './analytics';
+import { generateGoalAnalysisFallback } from './prompts/goalAnalysis';
 
 export class AIRequestPipeline {
   public async execute(req: AIPipelineRequest): Promise<AIPipelineResult> {
@@ -71,14 +72,19 @@ export class AIRequestPipeline {
       }
 
       if (!reply) {
-        // Fallback synthesis if custom synthesis failed validation or was empty
-        const fallbackResult = await ragEngine.generateResponse(req.query || searchQuery, retrievalResult, context.clientProfile, context.chatHistory);
-        reply = fallbackResult.reply;
+        if (purpose === 'goal-analysis') {
+          reply = generateGoalAnalysisFallback(context);
+        } else {
+          // Fallback synthesis if custom synthesis failed validation or was empty
+          const fallbackResult = await ragEngine.generateResponse(req.query || searchQuery, retrievalResult, context.clientProfile, context.chatHistory);
+          reply = fallbackResult.reply;
+        }
       }
     }
 
-    // Stage 9: AI Output Cleaning & Post-Processing
-    reply = cleanAIResponseOutput(reply, false);
+    // Stage 9: AI Output Cleaning & Post-Processing (strip asterisks for non-chat plain text modules)
+    const stripAsterisks = purpose !== 'chat';
+    reply = cleanAIResponseOutput(reply, false, stripAsterisks);
 
     const rawResult: AIPipelineRawResult = {
       reply,

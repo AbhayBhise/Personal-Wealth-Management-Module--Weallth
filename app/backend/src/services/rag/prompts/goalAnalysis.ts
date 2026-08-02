@@ -22,15 +22,21 @@ You are Weallth's Goal Strategy Specialist.
 Your task is to produce a focused, structured mathematical analysis of a specific financial goal and present Ric Edelman's Solver Options.
 
 STRUCTURE YOUR OUTPUT CLEANLY:
-- **Net Worth & Goal Position Summary**: Diagnostic of current progress and shortfall.
-- **Edelman Solver Option A (Increase Monthly Savings)**: Explanation of required savings boost.
-- **Edelman Solver Option B (Adjust Present Target)**: Explanation of present target adjustment.
-- **Edelman Solver Option C (Extend Horizon)**: Explanation of timeline extension.
-- **Recommended Action Step**: Specific priority recommendation.
+Goal Strategy: [Goal Name]
+Goal Progress & Shortfall Summary:
+[Explain progress, target year, saved amount, funded percentage, and shortfall amount]
+
+Ric Edelman 3-Option Solver Strategies:
+1. Increase Monthly Savings (Option A): [Explain exact required monthly savings boost]
+2. Adjust Present Target (Option B): [Explain present target cost adjustment]
+3. Extend Target Horizon (Option C): [Explain timeline delay]
+
+Recommended Action Step:
+[State clear priority execution step]
 
 RULES:
 1. Speak directly, professionally, and concisely.
-2. DO NOT engage in general small talk or cite raw document filenames.
+2. DO NOT use markdown asterisks (**) or hashes (##). Use clean plain text headings.
 3. Keep focus strictly on the selected financial goal metrics and solver trade-offs.
 `;
 
@@ -45,4 +51,34 @@ ${contextText}
 Synthesize a structured Goal AI Strategy analysis:`;
 
   return { systemPrompt, fullPrompt };
+}
+
+export function generateGoalAnalysisFallback(context: UnifiedAIContext): string {
+  const goal = context.selectedGoal;
+  if (!goal) {
+    return 'Goal Strategy Analysis: Select a financial goal to view personalized Edelman Solver options and shortfall analysis.';
+  }
+
+  const options = goal.options;
+  const targetFormatted = `₹${goal.targetAmount.toLocaleString('en-IN')}`;
+  const savedFormatted = `₹${goal.alreadySaved.toLocaleString('en-IN')}`;
+  const shortfallFormatted = `₹${goal.shortfall.toLocaleString('en-IN')}`;
+  const monthlyFormatted = `₹${goal.monthlyContribution.toLocaleString('en-IN')}`;
+
+  const optAFormatted = options?.optionA_monthlySavings ? `₹${options.optionA_monthlySavings.toLocaleString('en-IN')}` : 'N/A';
+  const optBFormatted = options?.optionB_presentCost ? `₹${options.optionB_presentCost.toLocaleString('en-IN')}` : 'N/A';
+  const optCDelay = options?.optionC_delayMonths ?? 0;
+
+  return `Goal Strategy: ${goal.name}
+
+Goal Progress & Shortfall Summary:
+Your ${goal.name} target is ${targetFormatted} by ${goal.targetYear}. You have saved ${savedFormatted} (${goal.fundedPercentage}% funded) with a monthly contribution of ${monthlyFormatted}/month. The projected funding shortfall is ${shortfallFormatted}.
+
+Ric Edelman 3-Option Solver Strategies:
+1. Increase Monthly Savings (Option A): Boost monthly contribution by +${optAFormatted}/month to close the ${shortfallFormatted} shortfall on schedule.
+2. Adjust Present Target (Option B): Reduce target present cost to ${optBFormatted} to align with your current savings trajectory.
+3. Extend Target Horizon (Option C): Delay goal completion by ${optCDelay} months to allow compound growth to cover the shortfall.
+
+Recommended Action Step:
+Prioritize Option A by automating an additional ${optAFormatted}/month allocation to ensure 100% funding by ${goal.targetYear}.`;
 }
