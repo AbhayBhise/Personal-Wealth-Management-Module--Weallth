@@ -80,9 +80,9 @@ export function classifyQueryIntent(query: string): { intent: QueryIntent; topic
 
   // 2. Educational & Methodological Queries
   if (
-    q.includes('what is') || q.includes('explain') || q.includes('definition') ||
+    q.includes('what is') || q.includes('what are') || q.includes('explain') || q.includes('definition') ||
     q.includes('edelman 7-pillar') || q.includes('methodology') || q.includes('active vs passive') ||
-    q.includes('how does') || q.includes('meaning of')
+    q.includes('how does') || q.includes('meaning of') || q.includes('mutual fund') || q.includes('mutual funds')
   ) {
     if (q.includes('debt') || q.includes('avalanche')) return { intent: 'Educational', topic: 'Debt Management' };
     if (q.includes('emergency')) return { intent: 'Educational', topic: 'Emergency Fund' };
@@ -507,53 +507,71 @@ Focusing on these two pillars will elevate your Wealth Health Score from **57 (C
 
 To improve your score, focus on clearing high-interest credit debt and automating your monthly savings rate.`;
     } else if (intent === 'Educational') {
-      if (qLower.includes('7-pillar') || qLower.includes('edelman')) {
-        fallbackReply = `**Ric Edelman's 7-Pillar Wealth Methodology** is a comprehensive financial framework designed to measure and optimize long-term wealth health across seven critical areas:
+      if (qLower.includes('mutual fund') || qLower.includes('fund')) {
+        fallbackReply = `Educational Insight: Mutual Funds
 
-1. **🛡️ Emergency Fund**: 3–6 months of liquid reserves in high-yield liquid instruments.
-2. **💳 Debt Management**: Eliminating high-interest debt (>8% APR) using the Debt Avalanche strategy.
-3. **📈 Savings Rate**: Targeting a 15–20%+ monthly savings rate.
-4. **⚖️ Portfolio Drift**: Maintaining target asset allocation within ±5% rebalancing bands.
-5. **🏖️ Retirement Readiness**: Planning for a longevity horizon through age 95–100.
-6. **🩺 Insurance Protection**: Pure term life and comprehensive health coverage.
-7. **📜 Estate Planning**: Establishing wills, trusts, and clear beneficiary designations.`;
+A mutual fund is a professionally managed investment vehicle that pools money from multiple investors to purchase a diversified portfolio of equities, fixed income, or liquid market instruments.
+
+Key Concepts (Ric Edelman Methodology):
+1. Diversification: Spreads investment risk across hundreds of underlying holdings rather than individual stocks.
+2. Index vs. Active Management: Low-cost index funds track broad market benchmarks (e.g. Nifty 50, S&P 500) with minimal expense ratios, outperforming 85%+ of actively managed funds over 10-15+ year horizons.
+3. Goal-Based Asset Allocation: Aligning equity vs. debt fund ratios according to your risk tolerance and target time horizons.`;
+      } else if (qLower.includes('7-pillar') || qLower.includes('edelman')) {
+        fallbackReply = `Ric Edelman's 7-Pillar Wealth Methodology is a comprehensive financial framework designed to measure and optimize long-term wealth health across seven critical areas:
+
+1. 🛡️ Emergency Fund: 3–6 months of liquid reserves in high-yield liquid instruments.
+2. 💳 Debt Management: Eliminating high-interest debt (>8% APR) using the Debt Avalanche strategy.
+3. 📈 Savings Rate: Targeting a 15–20%+ monthly savings rate.
+4. ⚖️ Portfolio Drift: Maintaining target asset allocation within ±5% rebalancing bands.
+5. 🏖️ Retirement Readiness: Planning for a longevity horizon through age 95–100.
+6. 🩺 Insurance Protection: Pure term life and comprehensive health coverage.
+7. 📜 Estate Planning: Establishing wills, trusts, and clear beneficiary designations.`;
       } else {
-        fallbackReply = `**Financial Strategy Overview**
+        fallbackReply = `Financial Strategy Overview
 
 Understanding key wealth management principles empowers better financial decision-making. By balancing liquidity, high-interest debt control, and disciplined asset allocation, you protect long-term wealth growth against market volatility.
 
-**Key Principles:**
-• **Liquidity First**: Maintain an emergency reserve before taking speculative risk.
-• **Guaranteed Return**: Clearing 21.99% APR credit card debt yields a guaranteed tax-free return equal to your APR.
-• **Diversification**: Spread assets across equities, debt, and liquid reserves.`;
+Key Principles:
+• Liquidity First: Maintain an emergency reserve before taking speculative risk.
+• Guaranteed Return: Clearing 21.99% APR credit card debt yields a guaranteed tax-free return equal to your APR.
+• Diversification: Spread assets across equities, debt, and liquid reserves.`;
       }
     } else if (intent === 'Debt & Cash Flow') {
-      fallbackReply = `**Personalized Debt Payoff Analysis**
+      fallbackReply = `Personalized Debt Payoff Analysis
 
-Your current profile shows an outstanding high-interest credit card balance at **21.99% APR**.
+Your current profile shows an outstanding high-interest credit card balance at 21.99% APR.
 
-**Recommended Strategy:**
-Apply Ric Edelman's **Debt Avalanche** method:
+Recommended Strategy:
+Apply Ric Edelman's Debt Avalanche method:
 1. Maintain minimum monthly payments on all low-interest liabilities.
 2. Direct 100% of available monthly surplus cash flow toward paying off high-interest credit card debt.
-3. Eliminating this debt saves **~₹700/year in interest** and protects your Net Worth (${netWorthStr}).`;
+3. Eliminating this debt saves ~₹700/year in interest and protects your Net Worth (${netWorthStr}).`;
     } else if (intent === 'Emergency Fund') {
-      fallbackReply = `**Emergency Fund Status**
+      fallbackReply = `Emergency Fund Status
 
-Great news! Your liquid emergency buffer currently stands at a solid **${efMonths} months** of operating expenses, fully meeting the 6-month target!
+Great news! Your liquid emergency buffer currently stands at a solid ${efMonths} months of operating expenses, fully meeting the 6-month target!
 
-**Next Steps:**
+Next Steps:
 1. Keep this 6-month reserve in high-yield liquid instruments so it stays fully accessible.
 2. Since your emergency reserve is fully funded, direct new monthly savings toward clearing your 21.99% APR credit card balance to maximize net worth growth.`;
+    } else if (intent === 'Retirement & Longevity') {
+      fallbackReply = `Retirement Readiness & Longevity Roadmap
+
+Planning for retirement requires evaluating longevity risk (preparing through age 95–100) and tax-efficient withdrawal sequencing.
+
+Recommended Retirement Steps:
+1. Tax-Efficient Withdrawal Order: Withdraw from taxable accounts first, tax-deferred accounts second, and tax-exempt accounts last.
+2. Asset Allocation Glide Path: Shift equities toward fixed-income as retirement approaches while retaining equity exposure to outpace inflation.
+3. Health & Long-Term Care: Ensure comprehensive medical coverage to protect retirement capital against healthcare shocks.`;
     } else {
-      fallbackReply = `**Net Worth Growth Strategy**
+      fallbackReply = `Net Worth Growth Strategy
 
-Your current Net Worth is **${netWorthStr}** with a Wealth Health Score of **${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'})**.
+Your current Net Worth is ${netWorthStr} with a Wealth Health Score of ${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'}).
 
-**Recommended Actions to Accelerate Growth:**
-1. **Pay Off High-Interest Credit Debt**: Eliminating 21.99% APR balances guarantees an immediate risk-free return.
-2. **Automate Monthly Savings Rate**: Target a 15%+ savings rate into goal-based investment accounts.
-3. **Rebalance Portfolio**: Align asset allocation to prevent portfolio drift.`;
+Recommended Actions to Accelerate Growth:
+1. Pay Off High-Interest Credit Debt: Eliminating 21.99% APR balances guarantees an immediate risk-free return.
+2. Automate Monthly Savings Rate: Target a 15%+ savings rate into goal-based investment accounts.
+3. Rebalance Portfolio: Align asset allocation to prevent portfolio drift.`;
     }
 
     return {

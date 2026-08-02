@@ -821,12 +821,16 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
   const clientContext = await fetchClientFinancialContext(userId);
   const trimmed = message.trim().toLowerCase();
 
-  // Small-talk / Greeting Intent Detection
+  // Small-talk / Greeting Intent Detection (word boundary match for short messages <= 20 chars)
   const greetings = ['hi', 'hello', 'hey', 'good morning', 'good evening', 'good afternoon', 'hola', 'namaste'];
   const farewells = ['bye', 'by', 'goodbye', 'see you', 'talk to you later', 'take care'];
   const grateful = ['thanks', 'thank you', 'thx', 'appreciate it'];
 
-  if (greetings.some(g => trimmed.includes(g))) {
+  const isGreetingMatch = trimmed.length <= 20 && greetings.some(g => new RegExp(`\\b${g}\\b`, 'i').test(trimmed));
+  const isFarewellMatch = trimmed.length <= 20 && farewells.some(f => new RegExp(`\\b${f}\\b`, 'i').test(trimmed));
+  const isGratefulMatch = trimmed.length <= 25 && grateful.some(t => new RegExp(`\\b${t}\\b`, 'i').test(trimmed));
+
+  if (isGreetingMatch) {
     return {
       reply: `Hello! I am your Weallth AI Advisor, powered by Ric Edelman's planning methodology and global wealth management research. How can I assist you with your financial plan today? You can ask me about emergency funds, debt management, retirement planning, goal shortfalls, or portfolio allocations.`,
       suggestedFollowUps: [
@@ -839,7 +843,7 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
     };
   }
 
-  if (farewells.some(f => trimmed.includes(f))) {
+  if (isFarewellMatch) {
     return {
       reply: `Goodbye! Stay disciplined with your savings rate and wealth goals. Feel free to reach out whenever you want to update your plan.`,
       suggestedFollowUps: [],
@@ -847,7 +851,7 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
     };
   }
 
-  if (grateful.some(t => trimmed.includes(t))) {
+  if (isGratefulMatch) {
     return {
       reply: `You're very welcome! Let me know if you have any other questions about your wealth health score or portfolio strategy.`,
       suggestedFollowUps: [
