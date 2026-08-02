@@ -103,6 +103,73 @@ export default function Goals() {
   const [coachMessages, setCoachMessages] = useState<Record<string, AIGoalCoachMessage>>({});
   const [loading, setLoading] = useState(true);
   const [selectedGoalIdModal, setSelectedGoalIdModal] = useState<string | null>(null);
+  const [isAddGoalModalOpen, setIsAddGoalModalOpen] = useState(false);
+  const [newGoalForm, setNewGoalForm] = useState({
+    name: '',
+    category: 'Purchase',
+    priority: 'Medium',
+    target_amount: '',
+    target_year: new Date().getFullYear() + 5,
+    already_saved: '',
+    monthly_contribution: ''
+  });
+  const [submittingGoal, setSubmittingGoal] = useState(false);
+
+  const handleCreateGoal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newGoalForm.name || !newGoalForm.target_amount || !newGoalForm.target_year) return;
+
+    setSubmittingGoal(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/${user.id}/goals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newGoalForm.name,
+          category: newGoalForm.category,
+          priority: newGoalForm.priority,
+          target_amount: Number(newGoalForm.target_amount),
+          target_year: Number(newGoalForm.target_year),
+          already_saved: Number(newGoalForm.already_saved || 0),
+          monthly_contribution: Number(newGoalForm.monthly_contribution || 0),
+        })
+      });
+
+      if (!res.ok) throw new Error('Failed to create goal');
+      const createdGoal: Goal = await res.json();
+
+      setGoals(prev => [createdGoal, ...prev]);
+      setIsAddGoalModalOpen(false);
+      setNewGoalForm({
+        name: '',
+        category: 'Purchase',
+        priority: 'Medium',
+        target_amount: '',
+        target_year: new Date().getFullYear() + 5,
+        already_saved: '',
+        monthly_contribution: ''
+      });
+
+      // Fetch Edelman options & coach message for new goal
+      if (createdGoal.shortfall > 0) {
+        fetch(`${API_BASE}/users/${user.id}/goals/${createdGoal.id}/options`)
+          .then(r => r.ok ? r.json() : null)
+          .then(opt => {
+            if (opt) setOptions(prev => ({ ...prev, [createdGoal.id]: opt }));
+          });
+
+        fetch(`${API_BASE}/users/${user.id}/goals/${createdGoal.id}/coach`)
+          .then(r => r.ok ? r.json() : null)
+          .then(msg => {
+            if (msg) setCoachMessages(prev => ({ ...prev, [createdGoal.id]: msg }));
+          });
+      }
+    } catch (err) {
+      console.error('Error creating goal:', err);
+    } finally {
+      setSubmittingGoal(false);
+    }
+  };
 
   useEffect(() => {
     if (!user) return;
@@ -181,7 +248,7 @@ export default function Goals() {
               border: 'none', borderRadius: '10px', fontWeight: 600, fontSize: '0.88rem',
               cursor: 'pointer', boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)', transition: 'transform 0.2s ease',
             }}
-            onClick={() => alert('New Goal Wizard: Complete Wealth Discovery to add customized financial targets.')}
+            onClick={() => setIsAddGoalModalOpen(true)}
           >
             <span style={{ fontSize: '1.1rem', lineHeight: 1 }}>+</span> Add New Goal
           </button>
@@ -525,6 +592,200 @@ export default function Goals() {
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── ADD NEW GOAL MODAL ──────────────────────────────────────────────── */}
+      {isAddGoalModalOpen && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(15, 23, 42, 0.85)', backdropFilter: 'blur(8px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999, padding: '1.5rem'
+        }}>
+          <div style={{
+            background: 'linear-gradient(145deg, #1e293b 0%, #0f172a 100%)',
+            border: '1px solid rgba(255, 255, 255, 0.15)', borderRadius: '16px',
+            width: '100%', maxWidth: '540px', overflow: 'hidden', boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: '1.25rem 1.5rem', background: 'rgba(255,255,255,0.03)',
+              borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                <span style={{ fontSize: '1.4rem' }}>🎯</span>
+                <h3 style={{ margin: 0, color: '#f8fafc', fontSize: '1.15rem', fontWeight: 700 }}>
+                  Add New Financial Goal
+                </h3>
+              </div>
+              <button 
+                onClick={() => setIsAddGoalModalOpen(false)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.4rem', cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateGoal} style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1.1rem' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                  GOAL NAME *
+                </label>
+                <input 
+                  type="text"
+                  required
+                  placeholder="e.g. Dream Vacation, Home Down Payment"
+                  value={newGoalForm.name}
+                  onChange={e => setNewGoalForm(prev => ({ ...prev, name: e.target.value }))}
+                  style={{
+                    width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                  }}
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    CATEGORY
+                  </label>
+                  <select 
+                    value={newGoalForm.category}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, category: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  >
+                    <option value="Education">Education 🎓</option>
+                    <option value="Retirement">Retirement ☂️</option>
+                    <option value="Purchase">Purchase 🚗</option>
+                    <option value="Emergency Fund">Emergency Fund 🛡️</option>
+                    <option value="Other">Other 🎯</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    PRIORITY
+                  </label>
+                  <select 
+                    value={newGoalForm.priority}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, priority: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(15,23,42,0.9)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  >
+                    <option value="High">High Priority</option>
+                    <option value="Medium">Medium Priority</option>
+                    <option value="Low">Low Priority</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    TARGET AMOUNT ({currency === 'INR' ? '₹' : '$'}) *
+                  </label>
+                  <input 
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="e.g. 500000"
+                    value={newGoalForm.target_amount}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, target_amount: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    TARGET YEAR *
+                  </label>
+                  <input 
+                    type="number"
+                    required
+                    min={new Date().getFullYear()}
+                    max={2100}
+                    placeholder="2032"
+                    value={newGoalForm.target_year}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, target_year: Number(e.target.value) }))}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    ALREADY SAVED ({currency === 'INR' ? '₹' : '$'})
+                  </label>
+                  <input 
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 50000"
+                    value={newGoalForm.already_saved}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, already_saved: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.35rem', fontWeight: 600 }}>
+                    MONTHLY SAVINGS ({currency === 'INR' ? '₹' : '$'})
+                  </label>
+                  <input 
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 3000"
+                    value={newGoalForm.monthly_contribution}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, monthly_contribution: e.target.value }))}
+                    style={{
+                      width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
+                      border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.8rem', marginTop: '0.8rem' }}>
+                <button 
+                  type="button"
+                  onClick={() => setIsAddGoalModalOpen(false)}
+                  style={{
+                    padding: '0.6rem 1.25rem', background: 'transparent', color: '#94a3b8',
+                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit"
+                  disabled={submittingGoal}
+                  style={{
+                    padding: '0.6rem 1.4rem', background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)', color: '#fff',
+                    border: 'none', borderRadius: '8px', fontWeight: 600, cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.35)', opacity: submittingGoal ? 0.7 : 1
+                  }}
+                >
+                  {submittingGoal ? 'Saving Goal...' : 'Add Financial Goal'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
