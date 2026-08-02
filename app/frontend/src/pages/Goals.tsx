@@ -466,22 +466,6 @@ export default function Goals() {
                         <button
                           onClick={() => {
                             setOpenMenuGoalId(null);
-                            setSelectedGoalIdModal(goal.id);
-                          }}
-                          style={{
-                            display: 'flex', alignItems: 'center', gap: '0.55rem', padding: '0.5rem 0.8rem',
-                            background: 'transparent', border: 'none', color: '#f8fafc', fontSize: '0.84rem',
-                            borderRadius: '6px', cursor: 'pointer', textAlign: 'left', width: '100%', fontWeight: 500
-                          }}
-                        >
-                          <span>📊</span> View Insights
-                        </button>
-
-                        <div style={{ height: '1px', background: 'rgba(255,255,255,0.1)', margin: '0.2rem 0' }} />
-
-                        <button
-                          onClick={() => {
-                            setOpenMenuGoalId(null);
                             handleDeleteGoal(goal.id, goal.name);
                           }}
                           style={{
