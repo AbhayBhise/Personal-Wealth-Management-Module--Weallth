@@ -516,6 +516,27 @@ Key Concepts (Ric Edelman Methodology):
 1. Diversification: Spreads investment risk across hundreds of underlying holdings rather than individual stocks.
 2. Index vs. Active Management: Low-cost index funds track broad market benchmarks (e.g. Nifty 50, S&P 500) with minimal expense ratios, outperforming 85%+ of actively managed funds over 10-15+ year horizons.
 3. Goal-Based Asset Allocation: Aligning equity vs. debt fund ratios according to your risk tolerance and target time horizons.`;
+      } else if (qLower.includes('debt avalanche') || qLower.includes('avalanche')) {
+        fallbackReply = `Educational Insight: Debt Avalanche Strategy
+
+Ric Edelman's Debt Avalanche method is a mathematically optimal debt payoff strategy:
+
+Key Principles:
+1. List All Liabilities: Rank debts by Interest Rate (APR) from highest to lowest.
+2. Maintain Minimum Payments: Pay exact minimum required amounts on all low-interest liabilities.
+3. Direct Surplus Cash Flow: Direct 100% of extra monthly savings toward the single highest APR debt (e.g. 21.99% APR credit card balance).
+4. Accelerate Payoff: Once the highest APR debt is eliminated, roll its monthly allocation into the next highest APR debt.
+
+Why It Works: Clearing high APR debt provides a guaranteed, risk-free tax-free return equal to your APR.`;
+      } else if (qLower.includes('withdrawal sequencing') || qLower.includes('sequencing')) {
+        fallbackReply = `Educational Insight: Retirement Withdrawal Sequencing
+
+Retirement withdrawal sequencing is the strategy of ordering account withdrawals during retirement to minimize total tax liability and preserve capital over a 30-35+ year longevity horizon.
+
+Ric Edelman Recommended Withdrawal Order:
+1. Taxable Brokerage & Liquid Accounts First: Realize capital gains at favorable long-term tax rates.
+2. Tax-Deferred Accounts Second: Allow assets to compound tax-deferred until mandatory distributions kick in.
+3. Tax-Exempt Accounts (Roth) Last: Maximize tax-free growth as long as possible for tax-free compounding.`;
       } else if (qLower.includes('7-pillar') || qLower.includes('edelman')) {
         fallbackReply = `Ric Edelman's 7-Pillar Wealth Methodology is a comprehensive financial framework designed to measure and optimize long-term wealth health across seven critical areas:
 
