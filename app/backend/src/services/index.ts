@@ -18,6 +18,7 @@ import {
 import { generateRecommendations } from '../calculations/recommendations';
 import { GoalCategory } from '../types';
 import { ragEngine, ClientFinancialContext } from './rag/engine';
+import { aiPipeline } from './rag/pipeline';
 
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
@@ -773,35 +774,29 @@ export async function getAIGoalCoachMessage(userId: string, goalId: string) {
   if (!goal || !options) return null;
 
   const clientContext = await fetchClientFinancialContext(userId);
-  const retrievedChunks = await ragEngine.semanticSearch("goal shortfall risk mathematical options", "Goal");
-  const userQuestion = `How should I address the shortfall for my goal "${goal.name}" (Shortfall: ₹${goal.shortfall.toLocaleString()}, Monthly contribution: ₹${goal.monthly_contribution.toLocaleString()})?`;
-  
-  const synthesizedObj = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
 
-  return {
-    goal_id: goalId,
-    message: synthesizedObj.reply,
-    disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
-  };
+  const pipelineRes = await aiPipeline.execute({
+    purpose: 'goal-analysis',
+    userId,
+    goalId,
+    goalData: goal,
+    goalOptions: options,
+    clientContext
+  });
+
+  return pipelineRes.formattedOutput;
 }
 
 export async function getAIRetirementCoachMessage(userId: string) {
   const clientContext = await fetchClientFinancialContext(userId);
-  const retrievedChunks = await ragEngine.semanticSearch("retirement longevity risk withdrawal sequence", "Retirement");
-  const userQuestion = `How should I plan my retirement roadmap, handle longevity risk, and order account withdrawals?`;
-  
-  const synthesizedObj = await ragEngine.generateResponse(userQuestion, retrievedChunks, clientContext);
-  
-  return {
-    user_id: userId,
-    sections: [
-      {
-        title: 'Retirement Roadmap via Gemini RAG',
-        content: synthesizedObj.reply,
-      }
-    ],
-    disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
-  };
+
+  const pipelineRes = await aiPipeline.execute({
+    purpose: 'retirement-analysis',
+    userId,
+    clientContext
+  });
+
+  return pipelineRes.formattedOutput;
 }
 
 export async function getAIRecommendationExplanation(userId: string, recId: string) {
@@ -810,21 +805,16 @@ export async function getAIRecommendationExplanation(userId: string, recId: stri
   if (!rec) return null;
 
   const clientContext = await fetchClientFinancialContext(userId);
-  const categoryFilter = rec.category === "Debt Management" ? "Debt" : rec.category === "Emergency Fund" ? "Emergency Fund" : "Asset Allocation";
-  const retrievalResult = await ragEngine.semanticSearch(rec.category, categoryFilter);
-  const userQuestion = `Why is there a rule violation for ${rec.category}? Details: ${rec.alert_message}`;
-  
-  const synthesizedObj = await ragEngine.generateResponse(userQuestion, retrievalResult, clientContext);
 
-  return {
-    recommendation_id: recId,
-    explanation: {
-      issue: `Rule Violation: ${rec.alert_message}`,
-      matters: synthesizedObj.reply,
-      action: `Review recommendation and follow priority action steps.`,
-    },
-    disclaimer: 'Advisory simulation only. Recommendations are not trading orders and do not constitute financial advice.',
-  };
+  const pipelineRes = await aiPipeline.execute({
+    purpose: 'priority-analysis',
+    userId,
+    recommendationId: recId,
+    recommendationData: rec,
+    clientContext
+  });
+
+  return pipelineRes.formattedOutput;
 }
 
 export async function chatWithAdvisor(userId: string, message: string, chatHistory: any[] = []) {
@@ -869,19 +859,13 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
     };
   }
 
-  const retrievalResult = await ragEngine.semanticSearch(message);
-  const responseObj = await ragEngine.generateResponse(message, retrievalResult, clientContext, chatHistory);
+  const pipelineRes = await aiPipeline.execute({
+    purpose: 'chat',
+    userId,
+    query: message,
+    chatHistory,
+    clientContext
+  });
 
-  return {
-    reply: responseObj.reply,
-    suggestedFollowUps: responseObj.suggestedFollowUps,
-    diagnostics: {
-      confidenceScore: responseObj.confidenceScore,
-      intent: responseObj.intent,
-      latencyMs: responseObj.latencyMs,
-      retrievedChunkIds: retrievalResult.chunks.map(c => c.id),
-      sources: responseObj.sources
-    },
-    disclaimer: 'Advisory simulation only. Not financial advice.'
-  };
+  return pipelineRes.formattedOutput;
 }

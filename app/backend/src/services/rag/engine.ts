@@ -565,6 +565,29 @@ Your current Net Worth is **${netWorthStr}** with a Wealth Health Score of **${c
       sources
     };
   }
+
+  /**
+   * Generic synthesis method for AI Request Pipeline to execute custom purpose prompts via Gemini.
+   */
+  public async synthesizeCustomPrompt(fullPrompt: string): Promise<string | null> {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!this.genAI || !apiKey || !apiKey.trim()) return null;
+
+    const modelNames = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
+    for (const modelName of modelNames) {
+      try {
+        const model = this.genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(fullPrompt);
+        const responseText = result.response.text();
+        if (responseText && responseText.trim().length > 0) {
+          return responseText.trim();
+        }
+      } catch (err: any) {
+        console.warn(`[RAG ENGINE] Custom prompt synthesis note (${modelName}): ${err?.message || err}`);
+      }
+    }
+    return null;
+  }
 }
 
 export const ragEngine = new RAGEngine();
