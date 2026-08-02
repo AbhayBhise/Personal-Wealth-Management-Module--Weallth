@@ -7,6 +7,7 @@ import { cleanAIResponseOutput } from './cleaner';
 import { aiCache } from './cache';
 import { aiAnalytics } from './analytics';
 import { generateGoalAnalysisFallback } from './prompts/goalAnalysis';
+import { generatePriorityAnalysisFallback } from './prompts/priorityAnalysis';
 
 export class AIRequestPipeline {
   public async execute(req: AIPipelineRequest): Promise<AIPipelineResult> {
@@ -74,6 +75,8 @@ export class AIRequestPipeline {
       if (!reply) {
         if (purpose === 'goal-analysis') {
           reply = generateGoalAnalysisFallback(context);
+        } else if (purpose === 'priority-analysis') {
+          reply = generatePriorityAnalysisFallback(context);
         } else {
           // Fallback synthesis if custom synthesis failed validation or was empty
           const fallbackResult = await ragEngine.generateResponse(req.query || searchQuery, retrievalResult, context.clientProfile, context.chatHistory);
