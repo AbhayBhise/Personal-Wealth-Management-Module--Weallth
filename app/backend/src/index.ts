@@ -21,5 +21,4 @@ app.get('/health', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Weallth PWM Backend running on http://localhost:${PORT}`);
   console.log(`- API base URL: http://localhost:${PORT}/api/v1`);
-  console.log(`- Use DEMO_CLIENT_ID: a1b2c3d4-0001-0001-0001-000000000001 for testing`);
 });

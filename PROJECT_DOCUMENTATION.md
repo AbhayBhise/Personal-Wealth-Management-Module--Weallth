@@ -248,7 +248,6 @@ Personal-Wealth-Management-Module--Weallth/
 │           │   └── index.ts               # Express router definitions
 │           ├── services/
 │           │   ├── index.ts               # Business logic orchestration
-│           │   ├── db.ts                  # File-backed JSON storage (fallback)
 │           │   └── rag/
 │           │       ├── engine.ts          # Core RAG engine + Gemini client
 │           │       ├── pipeline.ts        # 10-stage AI pipeline
@@ -259,8 +258,9 @@ Personal-Wealth-Management-Module--Weallth/
 │           │       ├── cleaner.ts         # Output cleaning (strip markdown)
 │           │       ├── validator.ts       # Input + confidence + response validation
 │           │       ├── evaluation.ts      # Golden test suite + RAG evaluator
-│           │       ├── chunks.ts          # Knowledge chunk loader
-│           │       ├── rag_knowledge.json # 1.6 MB knowledge base (EPUB chunks)
+│           │       ├── chunks.ts          # Knowledge chunk loader (fallback-aware)
+│           │       ├── sample_rag_knowledge.json  # Copyright-free placeholder (5 chunks)
+│           │       ├── rag_knowledge.json          # [GITIGNORED] Full 689-chunk KB — rebuild locally
 │           │       ├── context/
 │           │       │   └── builder.ts     # Unified context assembler
 │           │       ├── formatters/        # Purpose-specific output formatters
@@ -269,38 +269,40 @@ Personal-Wealth-Management-Module--Weallth/
 │           ├── calculations/
 │           │   ├── engine.ts              # All financial math formulas (TWR, MWR, WHS)
 │           │   └── recommendations.ts     # Rule-based recommendation generator
-│           ├── repositories/
-│           │   ├── index.ts               # Prisma repository layer
-│           │   └── index.legacy.ts        # File-backed JSON repository
-│           └── data/
-│               └── seed.ts                # In-memory seed data
+│           └── repositories/
+│               └── index.ts               # Prisma repository layer (PostgreSQL)
 │
-├── architecture/                          # Architecture diagrams (Mermaid)
-│   ├── erd.mmd                            # Entity Relationship Diagram
-│   ├── data_flow.mmd                      # Data flow sequence diagram
-│   ├── domain_model.mmd                   # Domain model diagram
-│   ├── module_dependency.mmd             # Module dependency diagram
-│   └── system_architecture.md            # Architecture narrative docs
-│
-├── docs/                                  # Domain specifications
+├── docs/                                  # All project documentation
+│   ├── architecture/                      # Architecture diagrams (Mermaid)
+│   │   ├── erd.mmd                        # Entity Relationship Diagram
+│   │   ├── data_flow.mmd                  # Data flow sequence diagram
+│   │   ├── domain_model.mmd               # Domain model diagram
+│   │   ├── module_dependency.mmd          # Module dependency diagram
+│   │   └── system_architecture.md         # Architecture narrative
+│   ├── specifications/                    # Functional & technical specs
+│   │   ├── api_contracts.md               # API endpoint contracts
+│   │   ├── recommendation_engine.md       # Rules engine specification
+│   │   ├── calculation_engine.md          # Financial math specification
+│   │   ├── ui_ux_plan.md                  # UI/UX design plan
+│   │   └── database_migration.md          # DB migration plan
+│   ├── database/
+│   │   └── schema.sql                     # Raw SQL schema (PostgreSQL)
+│   ├── ai/
+│   │   └── features.md                    # AI feature specifications
+│   ├── implementation/
+│   │   └── roadmap.md                     # Phase-by-phase delivery roadmap
+│   ├── testing/
+│   │   └── strategy.md                    # Testing strategy document
 │   ├── wealth_health_score.md             # WHS mathematical specifications
 │   ├── requirements.md                    # Functional requirements
 │   ├── standards.md                       # Coding standards
-│   └── analysis_and_roadmap.md           # Analysis & roadmap narrative
+│   └── analysis_and_roadmap.md            # Analysis & roadmap narrative
 │
-├── ai/
-│   └── features.md                        # AI feature specifications
-├── calculations/
-│   └── engine.md                          # Calculation engine specification
-├── implementation/
-│   └── roadmap.md                         # Phase-by-phase delivery roadmap
-├── testing/
-│   └── strategy.md                        # Testing strategy document
-├── scripts/
-│   ├── build_rag_knowledge.py             # RAG knowledge base builder
-│   └── (golden_test_suite scripts)
-└── database/
-    └── schema.sql                         # Raw SQL schema (PostgreSQL)
+├── research/
+│   └── README.md                          # How to rebuild the RAG knowledge base locally
+│
+└── scripts/
+    └── build_rag_knowledge.py             # RAG knowledge base builder (requires local Weallth/ folder)
 ```
 
 ---
@@ -319,11 +321,10 @@ Personal-Wealth-Management-Module--Weallth/
 | **Backend Language** | TypeScript | 5.x | Shared domain models, compile-time safety |
 | **Primary Database** | PostgreSQL | 14 (Docker) | ACID compliance, relational integrity, Prisma ORM support |
 | **ORM** | Prisma | 5.x | Type-safe queries, schema migrations, Decimal precision |
-| **DB Fallback** | File-Backed JSON | — | `data.json` via `services/db.ts` — 100% uptime if Postgres offline |
 | **Authentication** | JWT + bcryptjs | — | Stateless tokens, bcrypt password hashing (10 rounds) |
 | **AI LLM** | Google Gemini API | `gemini-1.5-flash` | Low-latency, high-reasoning, structured output synthesis |
-| **RAG Engine** | Custom TF-IDF + Semantic | — | In-process retrieval from `rag_knowledge.json`, no external vector DB |
-| **Knowledge Base** | EPUB + MD + DOCX chunks | 1.6 MB | Ric Edelman *Discover The Wealth Within You* + Global Wealth Mgmt specs |
+| **RAG Engine** | Custom TF-IDF + Semantic | — | In-process retrieval, no external vector DB required |
+| **Knowledge Base** | EPUB + MD + DOCX chunks | 1.6 MB (local only) | Gitignored — contains Ric Edelman copyrighted text. Rebuild with `scripts/build_rag_knowledge.py`. See `research/README.md` |
 | **Charts** | Recharts / SVG | — | Net worth, asset allocation, performance, and score gauge |
 | **Docker** | Docker Desktop | — | PostgreSQL container (`backend-db-1`, `pgvector/pgvector:pg16`) |
 | **Package Management** | npm | 9+ | Dependency management |
