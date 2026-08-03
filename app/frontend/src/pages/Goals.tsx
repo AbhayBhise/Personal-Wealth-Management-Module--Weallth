@@ -109,7 +109,7 @@ export default function Goals() {
     category: 'Purchase',
     priority: 'Medium',
     target_amount: '',
-    target_year: new Date().getFullYear() + 5,
+    target_year: (new Date().getFullYear() + 5).toString(),
     already_saved: '',
     monthly_contribution: ''
   });
@@ -154,7 +154,7 @@ export default function Goals() {
         category: 'Purchase',
         priority: 'Medium',
         target_amount: '',
-        target_year: new Date().getFullYear() + 5,
+        target_year: (new Date().getFullYear() + 5).toString(),
         already_saved: '',
         monthly_contribution: ''
       });
@@ -249,10 +249,11 @@ export default function Goals() {
     fetch(`${API_BASE}/users/${user.id}/goals`)
       .then(res => res.json())
       .then(data => {
-        setGoals(data);
+        const goalList = Array.isArray(data) ? data : [];
+        setGoals(goalList);
         setLoading(false);
 
-        data.forEach((g: Goal) => {
+        goalList.forEach((g: Goal) => {
           if (g.shortfall > 0) {
             fetch(`${API_BASE}/users/${user.id}/goals/${g.id}/options`)
               .then(r => r.ok ? r.json() : null)
@@ -567,17 +568,6 @@ export default function Goals() {
                   <p style={{ margin: 0, fontSize: '0.84rem', color: '#cbd5e1', lineHeight: 1.55 }}>
                     {cleanCoachSummary}
                   </p>
-
-                  <div style={{
-                    display: 'flex', gap: '1rem', paddingTop: '0.6rem', borderTop: '1px solid rgba(255,255,255,0.06)',
-                    fontSize: '0.76rem', color: '#94a3b8', fontWeight: 500,
-                  }}>
-                    <span>📋 3 Action Plans</span>
-                    <span>•</span>
-                    <span>⏱️ 5 Strategies</span>
-                    <span>•</span>
-                    <span>💡 2 Insights</span>
-                  </div>
                 </div>
               )}
 
@@ -623,17 +613,6 @@ export default function Goals() {
                       </span>
                     </div>
                   </div>
-
-                  <button 
-                    onClick={() => setSelectedGoalIdModal(goal.id)}
-                    style={{
-                      background: 'transparent', border: 'none', color: '#38bdf8',
-                      fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', textAlign: 'center',
-                      paddingTop: '0.2rem', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
-                    }}
-                  >
-                    Explore all options &rarr;
-                  </button>
                 </div>
               )}
             </div>
@@ -858,7 +837,7 @@ export default function Goals() {
                     max={2100}
                     placeholder="2032"
                     value={newGoalForm.target_year}
-                    onChange={e => setNewGoalForm(prev => ({ ...prev, target_year: Number(e.target.value) }))}
+                    onChange={e => setNewGoalForm(prev => ({ ...prev, target_year: e.target.value }))}
                     style={{
                       width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(0,0,0,0.3)',
                       border: '1px solid rgba(255,255,255,0.12)', borderRadius: '8px', color: '#f8fafc', fontSize: '0.9rem', outline: 'none'
