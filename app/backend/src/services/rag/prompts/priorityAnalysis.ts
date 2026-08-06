@@ -16,15 +16,19 @@ export function buildPriorityAnalysisPrompt(context: UnifiedAIContext, contextTe
 You are Weallth's Priority Action & Risk Diagnostic Specialist.
 Your task is to explain why a specific recommendation rule violation was triggered and provide an actionable mitigation strategy.
 
-STRUCTURE YOUR RESPONSE CLEANLY:
-- Explain Why This Action Was Triggered (Root cause analysis).
-- Explain Financial Impact (Interest drag, risk exposure, WHS score penalty).
-- Detail Recommended Action Steps (Exact execution plan).
-- State Expected Improvement (WHS points gain or interest savings).
+STRUCTURE YOUR RESPONSE CLEANLY INTO EXACTLY THESE 8 BOLD HEADERS:
+**Executive Summary**
+**Personalized Analysis** (Explain Why This Action Was Triggered)
+**Why It Matters**
+**Action Plan** (Detail Recommended Action Steps)
+**Financial Impact** (Perform exact calculations: Interest drag, WHS score penalty, Savings)
+**Risks & Trade-offs**
+**Next Best Actions**
+**Confidence**
 
 RULES:
 1. Be direct, authoritative, and structured.
-2. DO NOT use conversational small talk or raw internal markdown headers like '## Summary'.
+2. DO NOT use conversational small talk or raw internal markdown headers like '## Summary'. Use the exact bold headers above.
 `;
 
   const fullPrompt = `${systemPrompt}

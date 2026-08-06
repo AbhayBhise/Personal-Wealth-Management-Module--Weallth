@@ -81,6 +81,9 @@ export async function getClientProfile(userId: string): Promise<ClientProfile | 
     age: p.age,
     risk_profile: p.riskProfile as any,
     display_currency: p.displayCurrency,
+    has_will: p.hasWill,
+    has_poa: p.hasPoa,
+    has_hc_proxy: p.hasHcProxy,
   };
 }
 
@@ -92,11 +95,17 @@ export async function upsertClientProfile(userId: string, data: Partial<ClientPr
       age: data.age ?? 30,
       riskProfile: data.risk_profile ?? 'Balanced',
       displayCurrency: data.display_currency ?? 'INR',
+      hasWill: data.has_will ?? false,
+      hasPoa: data.has_poa ?? false,
+      hasHcProxy: data.has_hc_proxy ?? false,
     },
     update: {
       age: data.age,
       riskProfile: data.risk_profile,
       displayCurrency: data.display_currency,
+      hasWill: data.has_will,
+      hasPoa: data.has_poa,
+      hasHcProxy: data.has_hc_proxy,
     },
   });
   return {
@@ -104,6 +113,9 @@ export async function upsertClientProfile(userId: string, data: Partial<ClientPr
     age: p.age,
     risk_profile: p.riskProfile as any,
     display_currency: p.displayCurrency,
+    has_will: p.hasWill,
+    has_poa: p.hasPoa,
+    has_hc_proxy: p.hasHcProxy,
   };
 }
 

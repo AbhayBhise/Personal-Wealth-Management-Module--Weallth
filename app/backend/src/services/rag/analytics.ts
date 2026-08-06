@@ -5,6 +5,14 @@ export interface AITelemetryRecord {
   totalLatencyMs: number;
   retrievalLatencyMs: number;
   timestamp: string;
+  
+  // New metrics for RAG Observability
+  precision_at_3?: number;       // % of top-3 results that are relevant
+  recall_at_5?: number;          // % of relevant docs retrieved in top-5
+  hit_rate?: number;             // 1 if any relevant result, else 0
+  mrr?: number;                  // Mean Reciprocal Rank (1/rank of first hit)
+  cache_hit?: boolean;
+  method?: string;               // vector | keyword | hybrid
 }
 
 export class AIAnalyticsTracker {
@@ -33,12 +41,30 @@ export class AIAnalyticsTracker {
     const feedbackUp = this.feedbackLog.filter(f => f.type === 'up').length;
     const feedbackDown = this.feedbackLog.filter(f => f.type === 'down').length;
 
+    // RAG specific aggregate metrics
+    const ragRecords = this.records.filter(r => r.hit_rate !== undefined);
+    const totalRag = ragRecords.length;
+    let avg_precision_at_3 = 0, avg_mrr = 0, cache_hit_rate = 0, vector_fallback_rate = 0;
+    
+    if (totalRag > 0) {
+      avg_precision_at_3 = ragRecords.reduce((acc, r) => acc + (r.precision_at_3 || 0), 0) / totalRag;
+      avg_mrr = ragRecords.reduce((acc, r) => acc + (r.mrr || 0), 0) / totalRag;
+      cache_hit_rate = ragRecords.filter(r => r.cache_hit).length / totalRag;
+      vector_fallback_rate = ragRecords.filter(r => r.method?.includes('fallback')).length / totalRag;
+    }
+
     return {
       totalRequests,
       avgLatencyMs: Math.round(totalLatency / totalRequests),
       lowConfidenceCount,
       feedbackUp,
       feedbackDown,
+      ragMetrics: {
+        avg_precision_at_3,
+        avg_mrr,
+        cache_hit_rate,
+        vector_fallback_rate
+      },
       purposeDistribution: this.getDistribution('purpose'),
       intentDistribution: this.getDistribution('intent')
     };

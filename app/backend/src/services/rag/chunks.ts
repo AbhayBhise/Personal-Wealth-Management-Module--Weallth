@@ -11,16 +11,25 @@
  * See also: research/README.md
  */
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-let knowledgeData: any[];
-try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  knowledgeData = require('./rag_knowledge.json');
-} catch {
-  console.warn('[RAG] rag_knowledge.json not found locally. Using sample_rag_knowledge.json (5 chunks).');
-  console.warn('[RAG] To rebuild: python3 scripts/build_rag_knowledge.py — see research/README.md');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  knowledgeData = require('./sample_rag_knowledge.json');
+import * as fs from 'fs';
+import * as path from 'path';
+
+let knowledgeData: any[] = [];
+const fullKbPath = path.join(__dirname, 'rag_knowledge.json');
+const sampleKbPath = path.join(__dirname, 'sample_rag_knowledge.json');
+const srcSampleKbPath = path.join(__dirname, '../../../src/services/rag/sample_rag_knowledge.json');
+const srcFullKbPath = path.join(__dirname, '../../../src/services/rag/rag_knowledge.json');
+
+if (fs.existsSync(fullKbPath)) {
+  knowledgeData = JSON.parse(fs.readFileSync(fullKbPath, 'utf-8'));
+} else if (fs.existsSync(srcFullKbPath)) {
+  knowledgeData = JSON.parse(fs.readFileSync(srcFullKbPath, 'utf-8'));
+} else if (fs.existsSync(sampleKbPath)) {
+  knowledgeData = JSON.parse(fs.readFileSync(sampleKbPath, 'utf-8'));
+} else if (fs.existsSync(srcSampleKbPath)) {
+  knowledgeData = JSON.parse(fs.readFileSync(srcSampleKbPath, 'utf-8'));
+} else {
+  console.warn('[RAG] No knowledge base JSON files found.');
 }
 
 export interface DocumentChunk {
@@ -29,6 +38,19 @@ export interface DocumentChunk {
     category: string;
     source: string;
     book?: string;
+    author?: string;
+    part?: string;
+    chapter?: string;
+    section?: string;
+    subsection?: string;
+    page_start?: number;
+    page_end?: number;
+    pages?: number[];
+    document_order?: number;
+    previous_chunk_id?: string | null;
+    next_chunk_id?: string | null;
+    token_count?: number;
+    keywords?: string[];
     title?: string;
   };
   text: string;
@@ -40,6 +62,19 @@ export const bookChunks: DocumentChunk[] = (knowledgeData as any[]).map(item => 
     category: item.category || 'General',
     source: item.source || 'Discover The Wealth Within You',
     book: item.book || 'Discover The Wealth Within You',
+    author: item.author || 'Ric Edelman',
+    part: item.part,
+    chapter: item.chapter,
+    section: item.section,
+    subsection: item.subsection,
+    page_start: item.page_start,
+    page_end: item.page_end,
+    pages: item.pages,
+    document_order: item.document_order,
+    previous_chunk_id: item.previous_chunk_id,
+    next_chunk_id: item.next_chunk_id,
+    token_count: item.token_count,
+    keywords: item.keywords,
     title: item.title || item.source
   },
   text: item.text

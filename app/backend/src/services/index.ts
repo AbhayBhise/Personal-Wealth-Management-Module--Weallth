@@ -6,7 +6,7 @@
  */
 import * as repo from '../repositories';
 import {
-  calculateWHS, getWHSCategory, calculateEmergencyFundTarget,
+  calculateWHS, getWHSCategory, calculateEmergencyFundTarget, inferPortfolioDrift,
   calculateInflationAdjustedCost, calculateGoalShortfall,
   calculateFutureValue, calculateFutureValueOfSavings,
   calculateRequiredSavings, calculateSupportableCost, calculateDelayMonths,
@@ -278,6 +278,9 @@ export async function submitWealthDiscovery(userId: string, payload: WealthDisco
     age,
     risk_profile: riskProfile,
     display_currency: 'INR',
+    has_will: payload.has_will,
+    has_poa: payload.has_poa,
+    has_hc_proxy: payload.has_hc_proxy,
   });
 
   // ── Calculate WHS ──────────────────────────────────────────────────────────
@@ -361,13 +364,26 @@ export async function submitWealthDiscovery(userId: string, payload: WealthDisco
 
 // ─── WHS Service ──────────────────────────────────────────────────────────────
 export async function getWHSSnapshot(userId: string) {
-  const profile = await repo.getClientProfile(userId);
-  const userHoldings = await repo.getHoldings(userId);
-  const userLiabilities = await repo.getLiabilities(userId);
-  const incomeProfile = await repo.getIncomeProfile(userId);
-  const insurance = await repo.getInsuranceProfile(userId);
-  const assumptions = await repo.getAssumptions(userId);
-  const userGoals = await repo.getGoals(userId);
+  const [
+    profile,
+    userHoldings,
+    userLiabilities,
+    incomeProfile,
+    insurance,
+    assumptions,
+    userGoals,
+    recommendations
+  ] = await Promise.all([
+    repo.getClientProfile(userId),
+    repo.getHoldings(userId),
+    repo.getLiabilities(userId),
+    repo.getIncomeProfile(userId),
+    repo.getInsuranceProfile(userId),
+    repo.getAssumptions(userId),
+    repo.getGoals(userId),
+    repo.getRecommendations(userId)
+  ]);
+
 
   if (!profile) return null;
 
@@ -409,6 +425,16 @@ export async function getWHSSnapshot(userId: string) {
   const goalsOnTrack = userGoals.filter(g => g.shortfall <= 0).length;
   const goalFundingRatio = userGoals.length > 0 ? goalsOnTrack / userGoals.length : 1;
 
+  // Portfolio Drift
+  const portfolioDrift = inferPortfolioDrift(
+    userHoldings.map(h => ({ category: h.category, currentValue: Number(h.current_value) })),
+    profile.risk_profile || 'Balanced'
+  );
+
+  // Dynamic Estate Planning (via Recommendations)
+  const estateRecs = recommendations.filter(r => r.category === 'Estate Planning');
+  const hasResolvedEstate = estateRecs.some(r => r.status === 'Addressed' || r.status === 'Dismissed');
+  
   const result = calculateWHS({
     liquidCashBalance: liquidCash,
     emergencyFundTarget,
@@ -419,16 +445,16 @@ export async function getWHSSnapshot(userId: string) {
     monthlySavings,
     savingsRate,
     targetSavingsRate: 0.15,
-    portfolioDrift: 0.05,
+    portfolioDrift,
     retirementReadinessRatio,
     goalFundingRatio,
     disabilityCoverageRatio,
     lifeCoverageRatio,
     hasLTC: insurance?.has_long_term_care ?? false,
     age: profile.age,
-    hasWill: false,
-    hasPOA: false,
-    hasHCProxy: false,
+    hasWill: profile.has_will || hasResolvedEstate,
+    hasPOA: profile.has_poa || hasResolvedEstate,
+    hasHCProxy: profile.has_hc_proxy || hasResolvedEstate,
   });
 
   return {
@@ -739,10 +765,32 @@ export async function getRebalancingAlerts(userId: string) {
 
 async function fetchClientFinancialContext(userId: string): Promise<ClientFinancialContext> {
   try {
-    const profile = await repo.getClientProfile(userId);
-    const whs = await getWHSSnapshot(userId);
-    const goals = await repo.getGoals(userId);
-    const liabilities = await repo.getLiabilities(userId);
+    const [profile, whs, goals, liabilities, holdings, insurance, income] = await Promise.all([
+      repo.getClientProfile(userId),
+      getWHSSnapshot(userId),
+      repo.getGoals(userId),
+      repo.getLiabilities(userId),
+      repo.getHoldings(userId),
+      repo.getInsuranceProfile(userId),
+      repo.getIncomeProfile(userId)
+    ]);
+
+    const totalValue = holdings.reduce((s, h) => s + h.current_value, 0);
+    const byAssetClass: Record<string, number> = {};
+    for (const h of holdings) {
+      if (!byAssetClass[h.category]) byAssetClass[h.category] = 0;
+      byAssetClass[h.category] += h.current_value;
+    }
+    const portfolio = Object.entries(byAssetClass).map(([cat, val]) => ({
+      category: cat,
+      percentage: totalValue > 0 ? Math.round((val / totalValue) * 100) : 0
+    }));
+
+    const annualIncome = income ? (income.salary + income.business + income.rental + income.other) : 0;
+    const monthlyNetIncome = annualIncome / 12;
+    const monthlyExpenses = monthlyNetIncome * 0.70;
+    const monthlyDebtPayments = liabilities.reduce((s, l) => s + l.monthly_payment, 0);
+    const cashFlow = monthlyNetIncome - monthlyExpenses - monthlyDebtPayments;
 
     return {
       age: profile?.age ?? 35,
@@ -760,7 +808,18 @@ async function fetchClientFinancialContext(userId: string): Promise<ClientFinanc
         targetAmount: g.target_amount,
         targetYear: g.target_year,
         isFunded: g.already_saved >= g.target_amount
-      }))
+      })),
+      cashFlow: Math.round(cashFlow),
+      assets: Math.round(totalValue),
+      portfolio,
+      insurance: insurance ? {
+        lifeCoverage: insurance.life_coverage,
+        disabilityCoverage: insurance.disability_coverage_monthly,
+        hasLTC: insurance.has_long_term_care
+      } : undefined,
+      retirementReadiness: whs?.score_retirement_readiness ?? 0,
+      whsScore: whs?.score ?? 57,
+      whsCategory: whs?.category ?? 'Caution'
     };
   } catch (err) {
     console.warn('[SERVICES] Warning fetching client context for RAG:', err);
@@ -832,7 +891,7 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
 
   if (isGreetingMatch) {
     return {
-      reply: `Hello! I am your Weallth AI Advisor, powered by Ric Edelman's planning methodology and global wealth management research. How can I assist you with your financial plan today? You can ask me about emergency funds, debt management, retirement planning, goal shortfalls, or portfolio allocations.`,
+      reply: `Hello! How can I assist you with your financial plan today?`,
       suggestedFollowUps: [
         'How can I grow my net worth?',
         'What is the Edelman 7-Pillar Methodology?',

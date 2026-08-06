@@ -30,7 +30,18 @@ export class AIRequestPipeline {
     }
 
     // Stage 5: Purpose Retrieval Strategy
-    const { searchQuery, categoryFilter } = moduleDef.getRetrievalStrategy(req.query, context);
+    let { searchQuery, categoryFilter } = moduleDef.getRetrievalStrategy(req.query, context);
+
+    // Contextual Memory Expansion
+    if (context.chatHistory && context.chatHistory.length > 0 && searchQuery) {
+      const lastAiTurn = [...context.chatHistory].reverse().find(t => t.sender === 'ai');
+      if (lastAiTurn && searchQuery.length < 35) {
+        const keywords = lastAiTurn.text.match(/\b(debt|emergency|retire|portfolio|score|avalanche|fund|allocation|insurance|estate|savings)\b/gi);
+        if (keywords && keywords.length > 0) {
+          searchQuery = `${searchQuery} ${Array.from(new Set(keywords)).join(' ')}`;
+        }
+      }
+    }
 
     // Stage 5b & 11: Caching Layer Check
     let retrievalResult = aiCache.getCachedRetrieval(searchQuery, categoryFilter);
@@ -57,14 +68,18 @@ export class AIRequestPipeline {
       // Stage 8: Shared RAG Engine LLM Synthesis with Stage 8b Response Validation & 1-Retry
       let attempts = 0;
       let rawResponse: string | null = null;
+      const maxAttempts = retrievalResult.confidenceScore > 0.80 ? 1 : 2;
 
-      while (attempts < 2) {
+      while (attempts < maxAttempts) {
         attempts++;
         rawResponse = await ragEngine.synthesizeCustomPrompt(promptObj.fullPrompt);
         if (rawResponse) {
           const respCheck = validateGeneratedResponse(rawResponse, context);
-          if (respCheck.isValid) {
+          if (respCheck.isValid || attempts === maxAttempts) {
             reply = rawResponse;
+            if (!respCheck.isValid) {
+              console.warn(`[AI PIPELINE] Response validation failed on final attempt ${attempts}, proceeding anyway: ${respCheck.error}`);
+            }
             break;
           } else {
             console.warn(`[AI PIPELINE] Response validation failed on attempt ${attempts}: ${respCheck.error}`);

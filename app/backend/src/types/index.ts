@@ -25,6 +25,9 @@ export interface ClientProfile {
   age: number;
   risk_profile: RiskProfile;
   display_currency: string;
+  has_will?: boolean;
+  has_poa?: boolean;
+  has_hc_proxy?: boolean;
 }
 
 export interface HouseholdMember {

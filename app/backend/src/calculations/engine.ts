@@ -247,6 +247,30 @@ export function scoreToRiskProfile(score: number): 'Conservative' | 'Moderately 
   return 'Aggressive';
 }
 
+// ─── Portfolio Drift ──────────────────────────────────────────────────────────
+export function inferPortfolioDrift(holdings: { category: string; currentValue: number }[], riskProfile: string): number {
+  const totalAssets = holdings.reduce((sum, h) => sum + h.currentValue, 0);
+  if (totalAssets === 0) return 0;
+
+  // Derive target equity percentage based on risk profile (Edelman standard heuristics)
+  let targetEquityPct = 0.50; // default Balanced
+  if (riskProfile === 'Aggressive') targetEquityPct = 0.85;
+  if (riskProfile === 'Growth') targetEquityPct = 0.70;
+  if (riskProfile === 'Balanced') targetEquityPct = 0.50;
+  if (riskProfile === 'Moderately Conservative') targetEquityPct = 0.35;
+  if (riskProfile === 'Conservative') targetEquityPct = 0.20;
+
+  // Calculate actual equity percentage (Assuming Stocks/Mutual Funds are Equity)
+  const equityCategories = ['Stocks', 'Mutual Funds', 'Equity', 'ETF'];
+  const actualEquity = holdings
+    .filter(h => equityCategories.some(cat => h.category.toLowerCase().includes(cat.toLowerCase())))
+    .reduce((sum, h) => sum + h.currentValue, 0);
+  
+  const actualEquityPct = actualEquity / totalAssets;
+
+  return Math.abs(actualEquityPct - targetEquityPct);
+}
+
 // ─── Wealth Health Score (7 Pillars) ─────────────────────────────────────────
 export interface WHSInputs {
   liquidCashBalance: number;
@@ -295,7 +319,7 @@ export function calculateWHS(inputs: WHSInputs): {
 
   // Pillar 2: Debt Management (20 pts)
   const debtRatio = inputs.totalAssets > 0 ? inputs.totalDebt / inputs.totalAssets : 1;
-  const highDebtPenalty = Math.min(10, inputs.highInterestDebt / 1000);
+  const highDebtPenalty = Math.min(10, (inputs.highInterestDebt / Math.max(1, inputs.monthlyNetIncome)) * 5);
   const debtRatioPenalty = Math.min(10, debtRatio * 10);
   const p2 = Math.max(0, Math.round(20 - highDebtPenalty - debtRatioPenalty));
 

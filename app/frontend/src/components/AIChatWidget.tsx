@@ -88,8 +88,7 @@ export const AIChatWidget: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <span style={{ fontSize: '18px' }}>🤖</span>
               <div>
-                <div style={{ fontSize: '14px', color: '#f8fafc' }}>Weallth AI Wealth Advisor</div>
-                <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '400' }}>Powered by Edelman Methodology & RAG</div>
+                <div style={{ fontSize: '14px', color: '#f8fafc', fontWeight: '600' }}>AI Wealth Advisor</div>
               </div>
             </div>
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
@@ -112,7 +111,7 @@ export const AIChatWidget: React.FC = () => {
           <div style={{ flex: 1, overflowY: 'auto', padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px', background: '#020617' }}>
             {chatHistory.length === 0 && (
               <div style={{ textAlign: 'center', color: '#94a3b8', marginTop: '24px', fontSize: '13px', lineHeight: '1.6' }}>
-                👋 Hello! I am your AI Wealth Advisor. Ask me anything about your financial plan, net worth growth, emergency funds, debt avalanche, or retirement readiness.
+                👋 Hello! How can I assist you with your financial plan today?
               </div>
             )}
             

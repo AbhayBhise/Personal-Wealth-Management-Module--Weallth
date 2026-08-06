@@ -87,3 +87,8 @@ data.json
 # ─── Spreadsheet Files ────────────────────────────────────────────────
 *.xlsx
 *.xls
+
+# ─── Temporary Dumps & Local Test Scripts ─────────────────────────────
+app/backend/src/services/rag/pgvector_embeddings_dump.json
+test-gemini.js
+app/backend/test-gemini.js

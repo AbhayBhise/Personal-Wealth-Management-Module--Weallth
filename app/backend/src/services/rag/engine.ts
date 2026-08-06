@@ -1,5 +1,9 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { bookChunks, DocumentChunk } from './chunks';
+import { embedder } from './embedder';
+import { vectorStore, VectorSearchResult } from './vectorStore';
+import { retrievalCache } from './retrievalCache';
+import { rerankChunks } from './reranker';
 
 export interface ClientFinancialContext {
   age?: number;
@@ -13,6 +17,11 @@ export interface ClientFinancialContext {
   riskProfile?: string;
   whsScore?: number;
   whsCategory?: string;
+  cashFlow?: number;
+  assets?: number;
+  portfolio?: Array<{ category: string; percentage: number }>;
+  insurance?: { lifeCoverage: number; disabilityCoverage: number; hasLTC: boolean };
+  retirementReadiness?: number;
 }
 
 export interface ChatMessageTurn {
@@ -37,11 +46,30 @@ export interface RetrievalResult {
   sources: string[];
 }
 
-function formatCleanSourceCitation(source?: string): string {
-  if (!source) return 'Ric Edelman – Discover The Wealth Within You';
-  let cleaned = source
+function formatCleanSourceCitation(sourceOrMeta?: string | { source?: string; book?: string; author?: string; part?: string; chapter?: string; section?: string; page_start?: number; page_end?: number }): string {
+  if (!sourceOrMeta) return 'Ric Edelman – Discover The Wealth Within You';
+  
+  if (typeof sourceOrMeta === 'object') {
+    const m = sourceOrMeta;
+    const author = m.author || 'Ric Edelman';
+    const book = m.book || 'Discover The Wealth Within You';
+    let citation = `${author} – ${book}`;
+    
+    if (m.chapter && m.chapter !== 'Front Matter') {
+      citation += `, ${m.chapter}`;
+    }
+    if (m.section && m.section !== 'Overview' && m.section !== m.chapter) {
+      citation += `, Section: ${m.section}`;
+    }
+    if (m.page_start) {
+      const pageRange = m.page_end && m.page_end !== m.page_start ? `pp. ${m.page_start}–${m.page_end}` : `p. ${m.page_start}`;
+      citation += ` (${pageRange})`;
+    }
+    return citation;
+  }
+
+  let cleaned = sourceOrMeta
     .replace(/C HAPTER/gi, 'Chapter')
-    .replace(/Ruhr/gi, 'Rely')
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -49,10 +77,6 @@ function formatCleanSourceCitation(source?: string): string {
     const parts = cleaned.split('-');
     const chapterPart = parts[1] ? parts[1].trim() : '';
     return `Ric Edelman – Discover The Wealth Within You${chapterPart ? `, ${chapterPart}` : ''}`;
-  } else if (cleaned.includes('Global Personal Wealth')) {
-    const parts = cleaned.split('-');
-    const docPart = parts[1] ? parts[1].trim() : '';
-    return `Global Personal Wealth Management Research – ${docPart || 'Framework'}`;
   }
   return cleaned;
 }
@@ -183,13 +207,209 @@ export class RAGEngine {
   }
 
   /**
-   * Performs Semantic Search, Topic Boosting & Re-ranking across knowledge chunks.
+   * Performs Hybrid Semantic Search, Context Expansion & Re-ranking using Pinecone
    */
   public async semanticSearch(query: string, categoryFilter?: string): Promise<RetrievalResult> {
     const startTime = Date.now();
     const { intent, topic } = classifyQueryIntent(query);
     console.log(`[RAG ENGINE] Intent: ${intent} | Target Topic: ${topic} | Query: "${query}"`);
 
+    // STAGE 3: Retrieval Cache Check
+    const cached = retrievalCache.get(query, categoryFilter);
+    if (cached) {
+      console.log(`[RAG ENGINE] Cache hit for query: "${query}"`);
+      const chunks: DocumentChunk[] = cached.results.map(r => ({
+        id: r.id,
+        text: r.text,
+        metadata: {
+          category: r.metadata.category,
+          source: r.metadata.source,
+          book: r.metadata.book || '',
+          title: r.metadata.title || ''
+        }
+      }));
+      return {
+        chunks,
+        confidenceScore: cached.confidenceScore,
+        latencyMs: Date.now() - startTime,
+        intent,
+        targetTopic: topic,
+        sources: Array.from(new Set(chunks.map(c => formatCleanSourceCitation(c.metadata.source))))
+      };
+    }
+
+    let vectorResults: VectorSearchResult[] = [];
+    let method = 'vector_only';
+    
+    // STAGE 2: Query Embedding & STAGE 4: Vector Similarity Search
+    try {
+      if (!vectorStore.isAvailable) {
+        await vectorStore.initialize();
+      }
+      if (vectorStore.isAvailable) {
+        const queryVector = await embedder.embed(query);
+        vectorResults = await vectorStore.search(queryVector, {
+          searchQuery: query,
+          filter: categoryFilter ? { category: categoryFilter } : undefined
+        });
+      } else {
+        throw new Error('PostgreSQL vectorStore not available');
+      }
+    } catch (error) {
+      console.warn('[RAG ENGINE] Vector search failed or unavailable, falling back to keyword search:', error);
+      method = 'keyword_fallback';
+    }
+
+    // STAGE 5: BM25 Keyword Fallback (Secondary)
+    let keywordResults: VectorSearchResult[] = [];
+    if (vectorResults.length < 5 || method === 'keyword_fallback') {
+      keywordResults = this.keywordSearch(query, topic, categoryFilter);
+      if (method === 'vector_only') method = 'hybrid_vector_keyword';
+    }
+
+    // STAGE 6: Hybrid Fusion (Reciprocal Rank Fusion)
+    const fusedResults = new Map<string, VectorSearchResult>();
+    
+    const vectorWeight = Number(process.env.RETRIEVAL_HYBRID_VECTOR_WEIGHT) || 0.7;
+    const keywordWeight = Number(process.env.RETRIEVAL_HYBRID_KEYWORD_WEIGHT) || 0.3;
+
+    vectorResults.forEach((res, rank) => {
+      const rrfScore = (res.score * vectorWeight) + (1 / (rank + 60));
+      fusedResults.set(res.id, { ...res, score: rrfScore });
+    });
+
+    keywordResults.forEach((res, rank) => {
+      const existing = fusedResults.get(res.id);
+      const rrfScore = (res.score * keywordWeight) + (1 / (rank + 60));
+      if (existing) {
+        existing.score += rrfScore;
+      } else {
+        fusedResults.set(res.id, { ...res, score: rrfScore });
+      }
+    });
+
+    let topFused = Array.from(fusedResults.values()).sort((a, b) => b.score - a.score).slice(0, 10);
+
+    // STAGE 7: Hierarchical Context Expansion
+    const expandedResults = new Map<string, VectorSearchResult>();
+    let adjacentAdded = 0;
+    let summariesAdded = 0;
+
+    if (process.env.RETRIEVAL_ENABLE_ADJACENT_CHUNKS !== 'false' && vectorStore.isAvailable) {
+      for (const res of topFused.slice(0, 5)) {
+        if (res.metadata.title?.toLowerCase().includes('about the author') || res.metadata.category?.toLowerCase().includes('about the author')) {
+           continue;
+        }
+        expandedResults.set(res.id, res);
+        
+        const summary = await vectorStore.getDocumentSummary(res.metadata.parent_doc_id);
+        if (summary && !expandedResults.has(summary.id)) {
+           expandedResults.set(summary.id, { ...summary, score: res.score * 0.5 });
+           summariesAdded++;
+        }
+
+        const adjacent = await vectorStore.getAdjacentChunks(res.id);
+        for (const adj of adjacent) {
+           if (!expandedResults.has(adj.id)) {
+             expandedResults.set(adj.id, { ...adj, score: res.score * 0.5 });
+             adjacentAdded++;
+           }
+        }
+      }
+      topFused = Array.from(expandedResults.values()).sort((a, b) => b.score - a.score).slice(0, 10);
+    }
+
+    // STAGE 8: Reranking (Gemini Cross-Encoder)
+    const candidatesToRerank = topFused.slice(0, 6);
+    const rerankedResults = await rerankChunks(query, candidatesToRerank);
+    let finalResults = rerankedResults.slice(0, 4);
+
+    // STAGE 9: Graceful Empty Retrieval Handling
+    if (finalResults.length === 0) {
+      console.log(`[RAG ENGINE] No relevant results found for query: "${query}"`);
+      finalResults = [{
+        id: 'fallback_empty',
+        score: 0.1,
+        text: 'I couldn\'t find verified information on this specific topic in my knowledge base. Please consult a qualified financial advisor for highly specific scenarios.',
+        metadata: {
+          id: 'fallback', text: '', category: 'General', source: 'System', book: '', title: 'Knowledge Gap',
+          parent_doc_id: '', chunk_index: 0, total_chunks: 1, is_summary: false, embedding_version: '', ingestion_timestamp: '', content_hash: ''
+        }
+      }];
+    }
+
+    // STAGE 10: Confidence Calibration & Structured Diagnostics
+    const topScore = finalResults[0]?.score ?? 0;
+    const avgScore = finalResults.slice(0, 3).reduce((acc, r) => acc + r.score, 0) / Math.max(1, Math.min(3, finalResults.length));
+    
+    let confidenceScore = (topScore * 0.6) + (avgScore * 0.4);
+    // If it was keyword fallback, confidence is generally lower/different scale
+    if (method === 'keyword_fallback') {
+      confidenceScore = Number(Math.min(0.98, Math.max(0.45, topScore / 18.0)).toFixed(2));
+    } else {
+       // Pinecone cosine scores are usually 0.6-0.9
+       confidenceScore = Number(Math.min(0.98, Math.max(0.10, confidenceScore)).toFixed(2));
+    }
+
+    const latencyMs = Date.now() - startTime;
+
+    console.log(JSON.stringify({
+      timestamp: new Date().toISOString(),
+      query,
+      method,
+      vectorResultsCount: vectorResults.length,
+      keywordResultsCount: keywordResults.length,
+      fusedResultsCount: fusedResults.size,
+      expandedResultsCount: expandedResults.size,
+      adjacentChunksAdded: adjacentAdded,
+      documentSummariesAdded: summariesAdded,
+      rerankedResultsCount: rerankedResults.length,
+      confidenceScore,
+      totalLatencyMs: latencyMs,
+      intent,
+      targetTopic: topic
+    }));
+
+    retrievalCache.set(query, finalResults, confidenceScore, categoryFilter);
+
+    const chunks: DocumentChunk[] = finalResults.map(r => ({
+      id: r.id,
+      text: r.text,
+      metadata: {
+        category: r.metadata.category,
+        source: r.metadata.source,
+        book: r.metadata.book || '',
+        author: r.metadata.author,
+        part: r.metadata.part,
+        chapter: r.metadata.chapter,
+        section: r.metadata.section,
+        subsection: r.metadata.subsection,
+        page_start: r.metadata.page_start,
+        page_end: r.metadata.page_end,
+        pages: r.metadata.pages,
+        document_order: r.metadata.document_order,
+        previous_chunk_id: r.metadata.previous_chunk_id,
+        next_chunk_id: r.metadata.next_chunk_id,
+        token_count: r.metadata.token_count,
+        keywords: r.metadata.keywords,
+        title: r.metadata.title || ''
+      }
+    }));
+
+    return {
+      chunks,
+      confidenceScore,
+      latencyMs,
+      intent,
+      targetTopic: topic,
+      sources: Array.from(new Set(chunks.map(c => formatCleanSourceCitation(c.metadata))))
+    };
+  }
+
+  /**
+   * Preserved TF-IDF Keyword Fallback
+   */
+  private keywordSearch(query: string, targetTopic: string, categoryFilter?: string): VectorSearchResult[] {
     let candidates = bookChunks;
     if (categoryFilter) {
       const filterLower = categoryFilter.toLowerCase();
@@ -201,22 +421,16 @@ export class RAGEngine {
     }
 
     const queryTokens = query.toLowerCase().split(/\W+/).filter(t => t.length > 2);
-    const targetTopicLower = topic.toLowerCase();
+    const targetTopicLower = targetTopic.toLowerCase();
 
-    // Score candidates based on TF-IDF term overlap, Title Match, Topic Boosting & Content Quality
     const scored = candidates.map(chunk => {
       const textLower = chunk.text.toLowerCase();
       const titleLower = (chunk.metadata.title || '').toLowerCase();
       const categoryLower = (chunk.metadata.category || '').toLowerCase();
 
       let score = 0;
+      if (categoryLower.includes(targetTopicLower) || targetTopicLower.includes(categoryLower)) score += 8.0;
 
-      // Topic Match Bonus
-      if (categoryLower.includes(targetTopicLower) || targetTopicLower.includes(categoryLower)) {
-        score += 8.0;
-      }
-
-      // Keyword Overlap Scoring
       const textTokens = textLower.split(/\W+/);
       const titleTokens = titleLower.split(/\W+/);
 
@@ -225,49 +439,46 @@ export class RAGEngine {
         const titleCount = titleTokens.filter(t => t === token).length;
         score += (textCount * 2.0) + (titleCount * 5.0);
       }
-
       if (chunk.text.length > 300) score += 0.5;
-
       return { chunk, score };
     });
 
     scored.sort((a, b) => b.score - a.score);
+    const topScored = scored.filter(s => s.score > 0).slice(0, 10);
 
-    let topScored = scored.filter(s => s.score > 0).map(s => s.chunk);
-    if (topScored.length === 0) {
-      topScored = candidates.slice(0, 5);
-    }
-
-    // Deduplicate top chunks
-    const uniqueChunks: DocumentChunk[] = [];
-    const seenSnippets = new Set<string>();
-
-    for (const chunk of topScored) {
-      const snippetKey = chunk.text.slice(0, 60);
-      if (!seenSnippets.has(snippetKey)) {
-        seenSnippets.add(snippetKey);
-        uniqueChunks.push(chunk);
-      }
-      if (uniqueChunks.length >= 5) break;
-    }
-
-    const maxScore = scored.length > 0 ? scored[0].score : 0;
-    // Normalized confidence calculation (0.45 to 0.98)
-    const confidenceScore = Number(Math.min(0.98, Math.max(0.45, maxScore / 18.0)).toFixed(2));
-    const latencyMs = Date.now() - startTime;
-
-    const sources = Array.from(new Set(uniqueChunks.map(c => formatCleanSourceCitation(c.metadata.source))));
-
-    console.log(`[RAG ENGINE] Retrieved ${uniqueChunks.length} chunks in ${latencyMs}ms. Confidence: ${confidenceScore}`);
-
-    return {
-      chunks: uniqueChunks,
-      confidenceScore,
-      latencyMs,
-      intent,
-      targetTopic: topic,
-      sources
-    };
+    return topScored.map(s => ({
+       id: s.chunk.id,
+       score: s.score,
+       text: s.chunk.text,
+       metadata: {
+         id: s.chunk.id,
+         text: s.chunk.text,
+         category: s.chunk.metadata.category,
+         source: s.chunk.metadata.source,
+         book: s.chunk.metadata.book || '',
+         author: s.chunk.metadata.author,
+         part: s.chunk.metadata.part,
+         chapter: s.chunk.metadata.chapter,
+         section: s.chunk.metadata.section,
+         subsection: s.chunk.metadata.subsection,
+         page_start: s.chunk.metadata.page_start,
+         page_end: s.chunk.metadata.page_end,
+         pages: s.chunk.metadata.pages,
+         document_order: s.chunk.metadata.document_order,
+         previous_chunk_id: s.chunk.metadata.previous_chunk_id,
+         next_chunk_id: s.chunk.metadata.next_chunk_id,
+         token_count: s.chunk.metadata.token_count,
+         keywords: s.chunk.metadata.keywords,
+         title: s.chunk.metadata.title || '',
+         parent_doc_id: '',
+         chunk_index: s.chunk.metadata.document_order || 0,
+         total_chunks: 1,
+         is_summary: false,
+         embedding_version: '',
+         ingestion_timestamp: '',
+         content_hash: ''
+       }
+    }));
   }
 
   /**
@@ -325,7 +536,7 @@ Could you clarify your question? You can ask me about:
     }
 
     const contextText = chunks.map((c, i) =>
-      `[Source ${i + 1}: ${formatCleanSourceCitation(c.metadata.source)}]\n${c.text}`
+      `[Source ${i + 1}: ${formatCleanSourceCitation(c.metadata)}]\n${c.text}`
     ).join('\n\n');
 
     const recentHistory = chatHistory.slice(-4);
@@ -345,21 +556,33 @@ Could you clarify your question? You can ask me about:
 
       clientContextStr = `
 - Net Worth: ${formatINR(clientContext.netWorth)}
-- Savings Rate: ${clientContext.savingsRate ?? 0}%
-- Emergency Fund Buffer: ${clientContext.emergencyFundMonths ?? 0} months
+- Investable Assets: ${formatINR(clientContext.assets)}
+- Monthly Cash Flow: ${formatINR(clientContext.cashFlow)}
+- Savings Rate: ${Math.round((clientContext.savingsRate ?? 0) * 100)}%
+- Emergency Fund Buffer: ${Math.round((clientContext.emergencyFundMonths ?? 0) * 10) / 10} months
 - Outstanding Debt: ${debtSummary}
 - Active Goals: ${goalSummary}
 - Wealth Health Score: ${clientContext.whsScore ?? 57}/100 (${clientContext.whsCategory ?? 'Caution'})
+- Portfolio Allocation: ${clientContext.portfolio?.map(p => `${p.category}: ${p.percentage}%`).join(', ') ?? 'N/A'}
+- Insurance: Life ${formatINR(clientContext.insurance?.lifeCoverage)}, Disability ${formatINR(clientContext.insurance?.disabilityCoverage)}, LTC: ${clientContext.insurance?.hasLTC ? 'Yes' : 'No'}
+- Retirement Readiness: ${Math.round((clientContext.retirementReadiness ?? 0) * 100)}%
 `;
     }
 
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (this.genAI && apiKey && apiKey.trim().length > 0) {
-      const modelNames = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
+      const modelNames = ['gemini-2.0-flash'];
       for (const modelName of modelNames) {
         try {
-          const model = this.genAI.getGenerativeModel({ model: modelName });
+          const model = this.genAI.getGenerativeModel(
+            { model: modelName },
+            { timeout: 3500 }
+          );
+
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`[RAG ENGINE] Gemini API timeout (3500ms Exceeded)`)), 3500)
+          );
 
           let intentInstruction = '';
           if (qLower.includes('lowest scoring') || qLower.includes('weakest pillar')) {
@@ -417,8 +640,16 @@ GUARDRAILS & RULES:
 2. Hallucinate NOTHING. Ground all recommendations strictly in the provided knowledge context or client profile data.
 3. Keep responses conversational, concise, direct, and easy to read.
 4. Use Indian Rupee (₹) formatting for monetary amounts.
-5. DO NOT display internal RAG raw markdown headers like '## Summary', '## Recommendation', '## Explanation', '## Action Plan', or '## Sources'. Format text cleanly with bold markdown.
-6. DO NOT include a "Sources" or "References" section at the end of your response body unless the user explicitly asks for references or sources in their question.
+5. EVERY single response MUST strictly follow this exact markdown structure with these bold headers:
+   **Executive Summary**
+   **Personalized Analysis**
+   **Why It Matters**
+   **Action Plan**
+   **Financial Impact** (Perform exact calculations here, e.g., interest savings, WHS point changes, months to payoff)
+   **Risks & Trade-offs**
+   **Next Best Actions**
+   **Confidence**
+6. DO NOT include a "Sources" or "References" section at the end of your response body unless explicitly asked.
 ${intentInstruction}
 `;
 
@@ -438,7 +669,8 @@ ${userQuestion}
 
 Provide a direct, well-structured, conversational response:`;
 
-          const result = await model.generateContent(fullPrompt);
+          const apiPromise = model.generateContent(fullPrompt);
+          const result = await Promise.race([apiPromise, timeoutPromise]);
           let responseText = result.response.text();
 
           if (responseText && responseText.trim().length > 0) {
@@ -612,11 +844,20 @@ Recommended Actions to Accelerate Growth:
     const apiKey = process.env.GEMINI_API_KEY;
     if (!this.genAI || !apiKey || !apiKey.trim()) return null;
 
-    const modelNames = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash-8b'];
+    const modelNames = ['gemini-2.0-flash', 'gemini-1.5-flash'];
     for (const modelName of modelNames) {
       try {
-        const model = this.genAI.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent(fullPrompt);
+        const model = this.genAI.getGenerativeModel(
+          { model: modelName },
+          { timeout: 3500 }
+        );
+        
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`[RAG ENGINE] LLM Synthesis timeout (3500ms Exceeded)`)), 3500)
+        );
+
+        const apiPromise = model.generateContent(fullPrompt);
+        const result = await Promise.race([apiPromise, timeoutPromise]);
         const responseText = result.response.text();
         if (responseText && responseText.trim().length > 0) {
           return responseText.trim();

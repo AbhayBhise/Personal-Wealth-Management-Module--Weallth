@@ -13,13 +13,13 @@ import { formatCurrency } from '../utils/formatters';
 
 
 const PILLAR_LABELS: Record<string, string> = {
-  score_emergency_fund: '🛡️ Emergency Fund',
-  score_debt_mgmt: '💳 Debt Management',
-  score_savings_rate: '📈 Savings Rate',
-  score_portfolio_drift: '⚖️ Portfolio Drift',
-  score_retirement_readiness: '🏖️ Retirement',
-  score_insurance_protection: '🩺 Insurance',
-  score_estate_planning: '📜 Estate Plan',
+  score_emergency_fund: '🚨 Emergency Fund (20 pts)',
+  score_debt_mgmt: '💳 Debt Management (20 pts)',
+  score_savings_rate: '📈 Savings Rate (15 pts)',
+  score_portfolio_drift: '⚖️ Portfolio Drift (15 pts)',
+  score_retirement_readiness: '🏖️ Retirement (15 pts)',
+  score_insurance_protection: '🛡️ Insurance (10 pts)',
+  score_estate_planning: '📜 Estate Plan (5 pts)'
 };
 
 function stripMarkdownText(text: string): string {
@@ -158,8 +158,8 @@ export default function Dashboard() {
                       <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginBottom: '0.5rem', lineHeight: 1.4 }}>{label}</div>
                       <div style={{ fontSize: '1.5rem', fontWeight: 700, color }}>{score}</div>
                       <div style={{ fontSize: '0.6rem', color: 'var(--text-secondary)' }}>/100</div>
-                      <div style={{ marginTop: '0.5rem', height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px' }}>
-                        <div style={{ width: `${score}%`, height: '100%', background: color, borderRadius: '2px', transition: 'width 0.5s ease' }} />
+                      <div style={{ marginTop: '0.5rem', height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: 0, left: 0, width: `${Math.max(0, Math.min(100, Number(score)))}%`, height: '100%', background: color, borderRadius: '2px', transition: 'width 0.5s ease' }} />
                       </div>
                     </div>
                   );
