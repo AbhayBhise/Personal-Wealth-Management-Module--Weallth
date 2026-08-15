@@ -1,4 +1,4 @@
-# ─── Node.js & npm ────────────────────────────────────────────────────
+# ─── Node.js & npm ─────────────────────────────────────────────────────────────
 node_modules/
 npm-debug.log*
 yarn-debug.log*
@@ -6,94 +6,79 @@ yarn-error.log*
 # NOTE: package-lock.json is intentionally NOT ignored.
 # Lock files must be version-controlled for reproducible CI/CD builds.
 
-# ─── TypeScript Build Outputs ─────────────────────────────────────────
+# ─── Build outputs ─────────────────────────────────────────────────────────────
 dist/
 build/
 *.tsbuildinfo
+frontend/dist/
+backend/dist/
 
-# ─── Environment & Secrets ────────────────────────────────────────────
+# ─── Environment & secrets ─────────────────────────────────────────────────────
 .env
 .env.*
 *.env
 !.env.example
 
-# ─── Logs ─────────────────────────────────────────────────────────────
+# ─── Logs ──────────────────────────────────────────────────────────────────────
 logs/
 *.log
 
-# ─── macOS System Files ───────────────────────────────────────────────
+# ─── OS & editor ───────────────────────────────────────────────────────────────
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# ─── IDE & Editor Configuration ───────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *.suo
 
-# ─── Python Artifacts (for scripts/build_rag_knowledge.py) ────────────
+# ─── Python artifacts (scripts/build_rag_knowledge.py) ─────────────────────────
 __pycache__/
 *.py[cod]
 *.pyo
 *.egg-info/
 
-# ─── Private Research & Copyrighted Source Documents ──────────────────
-# The Weallth/ folder contains:
-#   - Ric Edelman's book (HarperCollins copyright) — NEVER commit
-#   - Internal staff research DOCX/XLSX — keep local
-#   - AI Product Studio research outputs — keep local
-# To rebuild the RAG knowledge base from these documents,
-# see: scripts/build_rag_knowledge.py and research/README.md
+# ─── Private research & copyrighted source documents ───────────────────────────
+# Source books and internal research are never committed. To rebuild the RAG
+# knowledge base from them, see scripts/build_rag_knowledge.py and research/README.md.
 Weallth/
 research/source_documents/
 data/source_documents/
 
-# ─── RAG Knowledge Base (derived from copyrighted sources) ────────────
-# rag_chunks.json and document_nodes.json contain copyrighted book text.
-# They must NOT be committed to any repository.
-# A sample_rag_knowledge.json (copyright-free placeholder) is committed instead.
-app/backend/src/services/rag/rag_knowledge.json
-app/backend/src/services/rag/rag_chunks.json
-app/backend/src/services/rag/document_nodes.json
-app/backend/src/services/rag/rag_out/
-app/backend/src/services/rag/images/
-app/backend/src/services/rag/page_archive/
+# ─── RAG knowledge base (derived from copyrighted sources) ─────────────────────
+# rag_chunks.json and document_nodes.json contain copyrighted book text and must
+# not be committed. sample_rag_knowledge.json is a copyright-free placeholder.
+backend/src/services/rag/rag_knowledge.json
+backend/src/services/rag/rag_chunks.json
+backend/src/services/rag/document_nodes.json
+backend/src/services/rag/rag_out/
+backend/src/services/rag/images/
+backend/src/services/rag/page_archive/
+backend/src/services/rag/pgvector_embeddings_dump.json
 rag_out/
 
-# ─── Obsolete Runtime Data Files ──────────────────────────────────────
-# data.json was the pre-Prisma file-backed database. Now fully obsolete.
-# The active app uses PostgreSQL (Docker) via Prisma exclusively.
+# ─── Obsolete runtime data ─────────────────────────────────────────────────────
 data.json
+*.db
+*.sqlite
 
-# ─── Copyrighted / Licensed Document Types ────────────────────────────
-# These file extensions typically contain copyrighted or proprietary content.
-# NOTE: Images (.png, .jpg, .svg) are NOT globally ignored — the app
-# uses them for UI assets. Only private directories above are excluded.
+# ─── Copyrighted / licensed document types ─────────────────────────────────────
+# Images (.png, .jpg, .svg) are NOT ignored — the app uses them for UI assets.
 *.epub
 *.pdf
 *.docx
 *.doc
+*.xlsx
+*.xls
+*.pptx
+*.ppt
 
-# ─── Large Binary & Archive Files ─────────────────────────────────────
+# ─── Large binaries & media ────────────────────────────────────────────────────
 *.zip
 *.rar
 *.7z
 *.tar.gz
-
-# ─── Video & Presentation Files ───────────────────────────────────────
 *.mp4
 *.mov
 *.avi
-*.pptx
-*.ppt
-
-# ─── Spreadsheet Files ────────────────────────────────────────────────
-*.xlsx
-*.xls
-
-# ─── Temporary Dumps & Local Test Scripts ─────────────────────────────
-app/backend/src/services/rag/pgvector_embeddings_dump.json
-test-gemini.js
-app/backend/test-gemini.js
