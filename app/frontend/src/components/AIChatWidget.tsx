@@ -2,11 +2,44 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '../store/useAppStore';
 
 export const AIChatWidget: React.FC = () => {
-  const { isChatOpen, toggleChat, chatHistory, sendChatMessage, isChatLoading } = useAppStore();
+  const { isChatOpen, toggleChat, chatHistory, sendChatMessage, isChatLoading, pendingGoalContext, setPendingGoalContext } = useAppStore();
   const [input, setInput] = useState('');
   const [showDebug, setShowDebug] = useState(false);
   const [feedbackState, setFeedbackState] = useState<Record<number, 'up' | 'down'>>({});
+  const [activeGoalContext, setActiveGoalContext] = useState<typeof pendingGoalContext>(null);
   const endOfMessagesRef = useRef<HTMLDivElement>(null);
+
+  // When opened with pendingGoalContext, seed the initial contextual prompt automatically
+  useEffect(() => {
+    if (isChatOpen && pendingGoalContext) {
+      const g = pendingGoalContext;
+      setActiveGoalContext(g);
+      setPendingGoalContext(null);
+
+      // Build structured verified prompt for RAG + LLM
+      let prompt = `Help me understand and improve my ${g.goalName} (${g.category}) goal based on my current goal status.\n\n` +
+        `Verified Goal Data (pre-calculated):\n` +
+        `- Target: ₹${g.targetAmount.toLocaleString('en-IN')} by ${g.targetYear}\n` +
+        `- Already Saved: ₹${g.alreadySaved.toLocaleString('en-IN')} (${g.fundedPercentage}% funded)\n` +
+        `- Monthly Contribution: ₹${g.monthlyContribution.toLocaleString('en-IN')}/mo\n` +
+        `- Projected Shortfall: ${g.shortfall > 0 ? `₹${g.shortfall.toLocaleString('en-IN')}` : 'None (Fully Funded)'}\n`;
+
+      if (g.optionA_monthlySavings || g.optionB_presentCost || g.optionC_delayMonths) {
+        prompt += `- Edelman Solver Options: `;
+        const opts = [];
+        if (g.optionA_monthlySavings) opts.push(`Option A (Increase savings to ₹${g.optionA_monthlySavings.toLocaleString('en-IN')}/mo)`);
+        if (g.optionB_presentCost) opts.push(`Option B (Reduce target present cost to ₹${g.optionB_presentCost.toLocaleString('en-IN')})`);
+        if (g.optionC_delayMonths) opts.push(`Option C (Extend timeline by ${g.optionC_delayMonths} months)`);
+        prompt += opts.join(', ') + `\n`;
+      }
+
+      if (g.coachSummary) {
+        prompt += `- AI Goal Coach Assessment: ${g.coachSummary}\n`;
+      }
+
+      sendChatMessage(prompt);
+    }
+  }, [isChatOpen, pendingGoalContext, sendChatMessage, setPendingGoalContext]);
 
   useEffect(() => {
     if (endOfMessagesRef.current) {
@@ -107,6 +140,40 @@ export const AIChatWidget: React.FC = () => {
             </div>
           </div>
 
+          {/* Active Goal Context Banner */}
+          {activeGoalContext && (
+            <div style={{
+              padding: '8px 14px',
+              background: 'rgba(99, 102, 241, 0.15)',
+              borderBottom: '1px solid rgba(99, 102, 241, 0.25)',
+              fontSize: '11.5px',
+              color: '#c7d2fe',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <span>🎯</span>
+                <span style={{ fontWeight: 600, color: '#fff' }}>{activeGoalContext.goalName}</span>
+                <span>·</span>
+                <span style={{ color: '#a5b4fc' }}>{activeGoalContext.fundedPercentage}% funded</span>
+                {activeGoalContext.shortfall > 0 && (
+                  <>
+                    <span>·</span>
+                    <span style={{ color: '#f87171' }}>Gap: ₹{activeGoalContext.shortfall.toLocaleString('en-IN')}</span>
+                  </>
+                )}
+              </div>
+              <button
+                onClick={() => setActiveGoalContext(null)}
+                style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '12px', padding: '0 4px', lineHeight: 1 }}
+                title="Dismiss goal context"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           {/* Messages Container */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '14px', display: 'flex', flexDirection: 'column', gap: '14px', background: '#020617' }}>
             {chatHistory.length === 0 && (
@@ -117,6 +184,16 @@ export const AIChatWidget: React.FC = () => {
             
             {chatHistory.map((msg: any, idx: number) => {
               const isUser = msg.sender === 'user';
+              const isLastMessage = idx === chatHistory.length - 1;
+              const hasCustomFollowUps = msg.suggestedFollowUps && msg.suggestedFollowUps.length > 0;
+              const followUpsToShow = activeGoalContext
+                ? [
+                    "What if I increase my monthly contribution?",
+                    "Which solver option is best for me?",
+                    "How can I reduce the shortfall?",
+                    "What happens if I extend the timeline?"
+                  ]
+                : (hasCustomFollowUps ? msg.suggestedFollowUps : []);
 
               return (
                 <div key={idx} style={{
@@ -200,13 +277,13 @@ export const AIChatWidget: React.FC = () => {
                   )}
 
                   {/* Suggested Follow-up Chips */}
-                  {!isUser && msg.suggestedFollowUps && msg.suggestedFollowUps.length > 0 && idx === chatHistory.length - 1 && (
+                  {!isUser && isLastMessage && followUpsToShow.length > 0 && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                       <div style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '600', marginLeft: '2px' }}>
                         💡 You may also ask:
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                        {msg.suggestedFollowUps.map((prompt: string, pIdx: number) => (
+                        {followUpsToShow.map((prompt: string, pIdx: number) => (
                           <button
                             key={pIdx}
                             onClick={() => handleFollowUpClick(prompt)}

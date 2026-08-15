@@ -197,9 +197,37 @@ export interface RebalancingAlerts {
 
 // ─── AI Mock Services (Modules 1.1, 1.2, 1.3) ──────────────────────────────────
 
+export interface GoalCoachExplanation {
+  summary: string;
+  situation?: 'on_track' | 'small_shortfall' | 'large_shortfall' | 'fully_funded' | 'missing_data';
+  context?: string;
+  strategies?: string[];
+  tradeoffs?: string[];
+  action?: string;
+  optimization?: string;
+  missing?: string[];
+}
+
+export interface GoalChatContext {
+  goalId: string;
+  goalName: string;
+  category: string;
+  targetAmount: number;
+  targetYear: number;
+  alreadySaved: number;
+  monthlyContribution: number;
+  shortfall: number;
+  fundedPercentage: number;
+  situation?: string;
+  optionA_monthlySavings?: number;
+  optionB_presentCost?: number;
+  optionC_delayMonths?: number;
+  coachSummary?: string;
+}
+
 export interface AIGoalCoachMessage {
   goal_id: string;
-  message: string;
+  explanation: GoalCoachExplanation;
   disclaimer: string;
 }
 

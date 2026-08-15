@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 import { API_BASE } from '../services/api';
-import { Goal, AIGoalCoachMessage } from '../types';
+import { Goal, AIGoalCoachMessage, GoalCoachExplanation, GoalChatContext } from '../types';
 import { formatCurrency } from '../utils/formatters';
 
 interface GoalOptions {
@@ -80,24 +80,17 @@ const PRIORITY_BADGES: Record<string, { bg: string; color: string; label: string
   Low: { bg: 'rgba(16, 185, 129, 0.2)', color: '#34d399', label: 'LOW PRIORITY' },
 };
 
-function stripMarkdown(text: string): string {
-  if (!text) return '';
-  return text
-    .replace(/##\s*Summary/gi, '')
-    .replace(/##\s*Recommendation/gi, '')
-    .replace(/##\s*Explanation/gi, '')
-    .replace(/##\s*Action Plan/gi, '')
-    .replace(/##\s*Sources/gi, '')
-    .replace(/#{1,6}\s*/g, '')
-    .replace(/\*\*/g, '')
-    .replace(/\*/g, '')
-    .replace(/`/g, '')
-    .replace(/[\r\n]+/g, ' ')
-    .trim();
-}
+// Situation badge config for AI Coach adaptive display
+const SITUATION_CHIPS: Record<string, { bg: string; color: string; label: string; icon: string }> = {
+  fully_funded:    { bg: 'rgba(16, 185, 129, 0.18)', color: '#34d399', label: 'Fully Funded',    icon: '✓' },
+  on_track:        { bg: 'rgba(16, 185, 129, 0.15)', color: '#34d399', label: 'On Track',        icon: '✓' },
+  small_shortfall: { bg: 'rgba(245, 158, 11, 0.18)', color: '#fbbf24', label: 'Gap',             icon: '⚠' },
+  large_shortfall: { bg: 'rgba(239, 68, 68, 0.18)',  color: '#f87171', label: 'Critical Gap',   icon: '⚠' },
+  missing_data:    { bg: 'rgba(100, 116, 139, 0.2)', color: '#94a3b8', label: 'Data Missing',    icon: '?' },
+};
 
 export default function Goals() {
-  const { user, currency } = useAppStore();
+  const { user, currency, openChatWithGoalContext } = useAppStore();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [options, setOptions] = useState<Record<string, GoalOptions>>({});
   const [coachMessages, setCoachMessages] = useState<Record<string, AIGoalCoachMessage>>({});
@@ -159,20 +152,20 @@ export default function Goals() {
         monthly_contribution: ''
       });
 
-      // Fetch Edelman options & coach message for new goal
+      // Fetch Edelman options only when there's a shortfall
       if (createdGoal.shortfall > 0) {
         fetch(`${API_BASE}/users/${user.id}/goals/${createdGoal.id}/options`)
           .then(r => r.ok ? r.json() : null)
           .then(opt => {
             if (opt) setOptions(prev => ({ ...prev, [createdGoal.id]: opt }));
           });
-
-        fetch(`${API_BASE}/users/${user.id}/goals/${createdGoal.id}/coach`)
-          .then(r => r.ok ? r.json() : null)
-          .then(msg => {
-            if (msg) setCoachMessages(prev => ({ ...prev, [createdGoal.id]: msg }));
-          });
       }
+      // Always fetch coach — includes optimization for on-track goals
+      fetch(`${API_BASE}/users/${user.id}/goals/${createdGoal.id}/coach`)
+        .then(r => r.ok ? r.json() : null)
+        .then(msg => {
+          if (msg) setCoachMessages(prev => ({ ...prev, [createdGoal.id]: msg }));
+        });
     } catch (err) {
       console.error('Error creating goal:', err);
     } finally {
@@ -232,31 +225,27 @@ export default function Goals() {
       setGoals(prev => prev.map(g => g.id === updatedGoal.id ? updatedGoal : g));
       setEditingGoal(null);
 
-      // Refresh Edelman options & coach message for updated goal
+      // Refresh Edelman options only when there's a shortfall
       if (updatedGoal.shortfall > 0) {
         fetch(`${API_BASE}/users/${user.id}/goals/${updatedGoal.id}/options`)
           .then(r => r.ok ? r.json() : null)
           .then(opt => {
             if (opt) setOptions(prev => ({ ...prev, [updatedGoal.id]: opt }));
           });
-
-        fetch(`${API_BASE}/users/${user.id}/goals/${updatedGoal.id}/coach`)
-          .then(r => r.ok ? r.json() : null)
-          .then(msg => {
-            if (msg) setCoachMessages(prev => ({ ...prev, [updatedGoal.id]: msg }));
-          });
       } else {
+        // Clear stale options if goal is now on track
         setOptions(prev => {
           const next = { ...prev };
           delete next[updatedGoal.id];
           return next;
         });
-        setCoachMessages(prev => {
-          const next = { ...prev };
-          delete next[updatedGoal.id];
-          return next;
-        });
       }
+      // Always refresh coach for updated goal
+      fetch(`${API_BASE}/users/${user.id}/goals/${updatedGoal.id}/coach`)
+        .then(r => r.ok ? r.json() : null)
+        .then(msg => {
+          if (msg) setCoachMessages(prev => ({ ...prev, [updatedGoal.id]: msg }));
+        });
     } catch (err) {
       console.error('Error updating goal:', err);
     } finally {
@@ -274,19 +263,20 @@ export default function Goals() {
         setLoading(false);
 
         goalList.forEach((g: Goal) => {
+          // Fetch options only when there's a shortfall to solve
           if (g.shortfall > 0) {
             fetch(`${API_BASE}/users/${user.id}/goals/${g.id}/options`)
               .then(r => r.ok ? r.json() : null)
               .then(opt => {
                 if (opt) setOptions(prev => ({ ...prev, [g.id]: opt }));
               });
-              
-            fetch(`${API_BASE}/users/${user.id}/goals/${g.id}/coach`)
-              .then(r => r.ok ? r.json() : null)
-              .then(msg => {
-                if (msg) setCoachMessages(prev => ({ ...prev, [g.id]: msg }));
-              });
           }
+          // Always fetch coach — includes optimization tips for on-track/fully-funded goals
+          fetch(`${API_BASE}/users/${user.id}/goals/${g.id}/coach`)
+            .then(r => r.ok ? r.json() : null)
+            .then(msg => {
+              if (msg) setCoachMessages(prev => ({ ...prev, [g.id]: msg }));
+            });
         });
       })
       .catch(err => {
@@ -373,13 +363,11 @@ export default function Goals() {
           const fundedPct = goal.target_amount > 0
             ? Math.min(100, Math.round((goal.already_saved / goal.target_amount) * 100)) : 0;
 
-          const coachMsgObj = coachMessages[goal.id]?.message;
-          const rawCoachMsg = typeof coachMsgObj === 'string'
-            ? coachMsgObj
-            : (coachMsgObj && typeof coachMsgObj === 'object' && 'reply' in coachMsgObj)
-            ? (coachMsgObj as any).reply
-            : '';
-          const cleanCoachSummary = stripMarkdown(rawCoachMsg).slice(0, 230) + (rawCoachMsg.length > 230 ? '...' : '');
+          const coachExplanation: GoalCoachExplanation | undefined = coachMessages[goal.id]?.explanation;
+          const coachSummary = coachExplanation?.summary || '';
+          const coachSituation = coachExplanation?.situation;
+          const situationChip = coachSituation ? SITUATION_CHIPS[coachSituation] : null;
+          const previewText = coachSummary.length > 180 ? coachSummary.slice(0, 180) + '…' : coachSummary;
 
           return (
             <div 
@@ -559,8 +547,8 @@ export default function Goals() {
                 </div>
               </div>
 
-              {/* AI Goal Coach Card */}
-              {rawCoachMsg && (
+              {/* AI Goal Coach Card — adaptive summary + situation chip */}
+              {coachSummary && (
                 <div style={{
                   marginBottom: '1.25rem', padding: '1.1rem', borderRadius: '12px',
                   background: 'rgba(15, 23, 42, 0.65)', border: `1px solid ${theme.borderColor}`,
@@ -572,21 +560,29 @@ export default function Goals() {
                       <span style={{ fontWeight: 700, fontSize: '0.92rem', color: theme.accentColor }}>
                         AI Goal Coach
                       </span>
+                      {situationChip && (
+                        <span style={{
+                          fontSize: '0.68rem', padding: '0.18rem 0.55rem', borderRadius: '10px',
+                          background: situationChip.bg, color: situationChip.color, fontWeight: 700, letterSpacing: '0.03em',
+                        }}>
+                          {situationChip.icon} {situationChip.label}
+                        </span>
+                      )}
                     </div>
 
-                    <button 
+                    <button
                       onClick={() => setSelectedGoalIdModal(goal.id)}
                       style={{
                         background: 'transparent', border: 'none', color: theme.accentColor,
                         fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.25rem',
                       }}
                     >
-                      View Insights &rarr;
+                      Full Strategy &rarr;
                     </button>
                   </div>
 
                   <p style={{ margin: 0, fontSize: '0.84rem', color: '#cbd5e1', lineHeight: 1.55 }}>
-                    {cleanCoachSummary}
+                    {previewText}
                   </p>
                 </div>
               )}
@@ -640,99 +636,292 @@ export default function Goals() {
         })}
       </div>
 
-      {/* AI Goal Coach Full 5-Section Advice Modal */}
+      {/* AI Goal Coach — Adaptive Strategy Modal */}
       {selectedGoalIdModal && activeModalGoal && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(0, 0, 0, 0.75)', backdropFilter: 'blur(8px)',
+          background: 'rgba(0, 0, 0, 0.78)', backdropFilter: 'blur(10px)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 2000, padding: '1.5rem',
         }}>
           <div style={{
-            background: '#0f172a', border: '1px solid rgba(99, 102, 241, 0.4)',
-            borderRadius: '20px', width: '100%', maxWidth: '680px', maxHeight: '85vh',
-            display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
+            background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
+            borderRadius: '20px', width: '100%', maxWidth: '700px', maxHeight: '88vh',
+            display: 'flex', flexDirection: 'column', boxShadow: '0 24px 60px rgba(0,0,0,0.6)',
             overflow: 'hidden',
           }}>
             {/* Modal Header */}
-            <div style={{
-              padding: '1.25rem 1.6rem', background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%)',
-              borderBottom: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                <span style={{ fontSize: '1.4rem' }}>🤖</span>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', fontWeight: 700 }}>
-                    AI Goal Strategy: {activeModalGoal.name}
-                  </h3>
-                  <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                    Ric Edelman 7-Pillar Wealth Methodology & RAG Engine
-                  </span>
-                </div>
-              </div>
+            {(() => {
+              const modalTheme = CATEGORY_THEMES[activeModalGoal.category] || CATEGORY_THEMES.Default;
+              const modalExpl: GoalCoachExplanation | undefined = activeModalCoachMsg?.explanation;
+              const modalSit = modalExpl?.situation;
+              const modalSitChip = modalSit ? SITUATION_CHIPS[modalSit] : null;
 
-              <button 
-                onClick={() => setSelectedGoalIdModal(null)}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Modal Body: 5-Section Render */}
-            <div style={{ padding: '1.6rem', overflowY: 'auto', flex: 1, color: '#e2e8f0', lineHeight: 1.6, fontSize: '0.9rem' }}>
-              {(() => {
-                const modalCoachMsgObj = activeModalCoachMsg?.message;
-                const modalCoachMsgStr = typeof modalCoachMsgObj === 'string'
-                  ? modalCoachMsgObj
-                  : (modalCoachMsgObj && typeof modalCoachMsgObj === 'object' && 'reply' in modalCoachMsgObj)
-                  ? (modalCoachMsgObj as any).reply
-                  : '';
-
-                if (!modalCoachMsgStr) {
-                  return (
-                    <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
-                      Loading AI Goal Coach insights...
-                    </div>
-                  );
-                }
-
-                return modalCoachMsgStr.split('\n').map((line: string, idx: number) => {
-                  if (line.startsWith('## ')) {
-                    return (
-                      <h4 key={idx} style={{
-                        marginTop: idx > 0 ? '1.4rem' : '0', marginBottom: '0.5rem',
-                        fontSize: '1rem', fontWeight: 700, color: '#818cf8',
-                        borderBottom: '1px solid rgba(129, 140, 248, 0.2)', paddingBottom: '0.3rem',
+              return (
+                <>
+                  <div style={{
+                    padding: '1.3rem 1.7rem',
+                    background: 'linear-gradient(135deg, rgba(30, 27, 75, 0.85) 0%, rgba(15, 23, 42, 0.95) 100%)',
+                    borderBottom: '1px solid rgba(255,255,255,0.08)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <div style={{
+                        width: '42px', height: '42px', borderRadius: '12px',
+                        background: modalTheme.avatarBg, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: '1.3rem', border: `1px solid ${modalTheme.borderColor}`,
                       }}>
-                        {line.replace('## ', '')}
-                      </h4>
-                    );
-                  }
-                  if (!line.trim()) return <div key={idx} style={{ height: '6px' }} />;
-                  return <div key={idx} style={{ marginBottom: '0.4rem' }}>{line}</div>;
-                });
-              })()}
-            </div>
+                        {modalTheme.icon}
+                      </div>
+                      <div>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#f8fafc', fontWeight: 700 }}>
+                          {activeModalGoal.name}
+                        </h3>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginTop: '0.25rem' }}>
+                          <span style={{ fontSize: '0.75rem', color: '#64748b' }}>AI Goal Coach</span>
+                          {modalSitChip && (
+                            <span style={{
+                              fontSize: '0.68rem', padding: '0.18rem 0.55rem', borderRadius: '10px',
+                              background: modalSitChip.bg, color: modalSitChip.color, fontWeight: 700, letterSpacing: '0.03em',
+                            }}>
+                              {modalSitChip.icon} {modalSitChip.label}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedGoalIdModal(null)}
+                      style={{
+                        background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                        color: '#94a3b8', fontSize: '1.15rem', cursor: 'pointer', lineHeight: 1,
+                        width: '34px', height: '34px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </div>
 
-            {/* Modal Footer */}
-            <div style={{
-              padding: '1rem 1.6rem', background: 'rgba(15, 23, 42, 0.95)',
-              borderTop: '1px solid rgba(255,255,255,0.08)', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}>
-              <span style={{ fontSize: '0.78rem', color: '#64748b', fontStyle: 'italic' }}>
-                Advisory simulation only. Not financial advice.
-              </span>
-              <button 
-                onClick={() => setSelectedGoalIdModal(null)}
-                style={{
-                  padding: '0.5rem 1.25rem', background: '#334155', color: '#fff',
-                  border: 'none', borderRadius: '8px', fontWeight: 600, fontSize: '0.84rem', cursor: 'pointer',
-                }}
-              >
-                Close
-              </button>
-            </div>
+                  {/* Modal Body — Adaptive Sections */}
+                  <div style={{ padding: '1.6rem', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {!modalExpl ? (
+                      <div style={{ textAlign: 'center', color: '#94a3b8', padding: '3rem 1rem' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>⏳</div>
+                        <p style={{ margin: 0, fontSize: '0.9rem' }}>Loading AI Goal Coach strategy…</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Section A: Situation Banner — always shown */}
+                        <div style={{
+                          padding: '1rem 1.1rem', borderRadius: '12px',
+                          background: modalSitChip ? `${modalSitChip.bg}` : 'rgba(99,102,241,0.1)',
+                          border: `1px solid ${modalSitChip?.color ? modalSitChip.color + '30' : 'rgba(99,102,241,0.2)'}`,
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <span style={{ fontSize: '1.1rem' }}>🤖</span>
+                            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: modalSitChip?.color || '#818cf8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                              {modalSitChip?.label || 'Goal Status'}
+                            </span>
+                          </div>
+                          <p style={{ margin: 0, fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.6 }}>
+                            {modalExpl.summary}
+                          </p>
+                        </div>
+
+                        {/* Section B: Why It Matters — only if context */}
+                        {modalExpl.context && (
+                          <div style={{
+                            padding: '1rem 1.1rem', borderRadius: '12px',
+                            background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.07)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.5rem' }}>
+                              <span style={{ fontSize: '1rem' }}>💡</span>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Why It Matters</span>
+                            </div>
+                            <p style={{ margin: 0, fontSize: '0.875rem', color: '#cbd5e1', lineHeight: 1.65 }}>{modalExpl.context}</p>
+                          </div>
+                        )}
+
+                        {/* Section C: Strategies — only if strategies[] present */}
+                        {modalExpl.strategies && modalExpl.strategies.length > 0 && (
+                          <div style={{
+                            padding: '1rem 1.1rem', borderRadius: '12px',
+                            background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.07)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.75rem' }}>
+                              <span style={{ fontSize: '1rem' }}>⚡</span>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Strategies</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                              {modalExpl.strategies.map((s, i) => (
+                                <div key={i} style={{
+                                  display: 'flex', gap: '0.75rem', padding: '0.75rem 0.9rem', borderRadius: '10px',
+                                  background: 'rgba(99, 102, 241, 0.08)', border: '1px solid rgba(99,102,241,0.18)',
+                                }}>
+                                  <span style={{
+                                    minWidth: '22px', height: '22px', borderRadius: '50%', background: 'rgba(99,102,241,0.25)',
+                                    color: '#818cf8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: '0.72rem', fontWeight: 800, flexShrink: 0, marginTop: '1px',
+                                  }}>{i + 1}</span>
+                                  <span style={{ fontSize: '0.875rem', color: '#e2e8f0', lineHeight: 1.6 }}>{s}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section D: Trade-offs — only for large_shortfall */}
+                        {modalExpl.tradeoffs && modalExpl.tradeoffs.length > 0 && (
+                          <div style={{
+                            padding: '1rem 1.1rem', borderRadius: '12px',
+                            background: 'rgba(245, 158, 11, 0.05)', border: '1px solid rgba(245,158,11,0.18)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.65rem' }}>
+                              <span style={{ fontSize: '1rem' }}>⚖️</span>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#fbbf24', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trade-offs</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {modalExpl.tradeoffs.map((t, i) => (
+                                <div key={i} style={{ display: 'flex', gap: '0.6rem', fontSize: '0.875rem', color: '#cbd5e1', lineHeight: 1.6 }}>
+                                  <span style={{ color: '#fbbf24', flexShrink: 0, marginTop: '2px' }}>›</span>
+                                  <span>{t}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section E: Next Action — CTA block */}
+                        {modalExpl.action && (
+                          <div style={{
+                            padding: '1rem 1.1rem', borderRadius: '12px',
+                            background: 'linear-gradient(135deg, rgba(99,102,241,0.14) 0%, rgba(79,70,229,0.1) 100%)',
+                            border: '1px solid rgba(99,102,241,0.3)',
+                            display: 'flex', alignItems: 'flex-start', gap: '0.75rem',
+                          }}>
+                            <span style={{
+                              minWidth: '28px', height: '28px', borderRadius: '8px', background: 'rgba(99,102,241,0.3)',
+                              color: '#818cf8', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '1rem', flexShrink: 0,
+                            }}>→</span>
+                            <div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#818cf8', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>Next Action</div>
+                              <p style={{ margin: 0, fontSize: '0.9rem', color: '#e2e8f0', lineHeight: 1.6, fontWeight: 500 }}>{modalExpl.action}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section F: Optimization Tips — for on_track / fully_funded */}
+                        {modalExpl.optimization && (
+                          <div style={{
+                            padding: '1rem 1.1rem', borderRadius: '12px',
+                            background: 'rgba(16, 185, 129, 0.07)', border: '1px solid rgba(16,185,129,0.22)',
+                            display: 'flex', gap: '0.75rem', alignItems: 'flex-start',
+                          }}>
+                            <span style={{ fontSize: '1.2rem', flexShrink: 0 }}>✨</span>
+                            <div>
+                              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#34d399', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.3rem' }}>Optimization</div>
+                              <p style={{ margin: 0, fontSize: '0.875rem', color: '#cbd5e1', lineHeight: 1.65 }}>{modalExpl.optimization}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Section G: Missing Data Notice */}
+                        {modalExpl.missing && modalExpl.missing.length > 0 && (
+                          <div style={{
+                            padding: '1rem 1.1rem', borderRadius: '12px',
+                            background: 'rgba(100, 116, 139, 0.1)', border: '1px solid rgba(100,116,139,0.25)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.6rem' }}>
+                              <span style={{ fontSize: '1rem' }}>📋</span>
+                              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Data Needed</span>
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                              {modalExpl.missing.map((m, i) => (
+                                <div key={i} style={{ display: 'flex', gap: '0.5rem', fontSize: '0.875rem', color: '#94a3b8', lineHeight: 1.55 }}>
+                                  <span style={{ color: '#64748b', flexShrink: 0 }}>•</span>
+                                  <span>{m}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+
+                  {/* Modal Footer */}
+                  <div style={{
+                    padding: '0.9rem 1.7rem',
+                    background: 'rgba(15, 23, 42, 0.95)',
+                    borderTop: '1px solid rgba(255,255,255,0.07)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem',
+                  }}>
+                    <span style={{ fontSize: '0.75rem', color: '#475569', fontStyle: 'italic' }}>
+                      Advisory simulation only. Not financial advice.
+                    </span>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <button
+                        onClick={() => {
+                          const gOpt = options[activeModalGoal.id];
+                          const coachExpl = activeModalCoachMsg?.explanation;
+                          const ctx: GoalChatContext = {
+                            goalId: activeModalGoal.id,
+                            goalName: activeModalGoal.name,
+                            category: activeModalGoal.category,
+                            targetAmount: activeModalGoal.target_amount,
+                            targetYear: activeModalGoal.target_year,
+                            alreadySaved: activeModalGoal.already_saved,
+                            monthlyContribution: activeModalGoal.monthly_contribution,
+                            shortfall: activeModalGoal.shortfall,
+                            fundedPercentage: activeModalGoal.target_amount > 0 
+                              ? Math.min(100, Math.round((activeModalGoal.already_saved / activeModalGoal.target_amount) * 100))
+                              : 0,
+                            situation: coachExpl?.situation,
+                            optionA_monthlySavings: gOpt?.option_a_required_monthly_savings,
+                            optionB_presentCost: gOpt?.option_b_supported_present_cost,
+                            optionC_delayMonths: gOpt?.option_c_delay_months,
+                            coachSummary: coachExpl?.summary,
+                          };
+                          openChatWithGoalContext(ctx);
+                          setSelectedGoalIdModal(null);
+                        }}
+                        style={{
+                          padding: '0.5rem 1.1rem',
+                          background: 'linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          fontWeight: 600,
+                          fontSize: '0.84rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          boxShadow: '0 2px 8px rgba(99,102,241,0.3)',
+                          transition: 'transform 0.15s ease',
+                        }}
+                      >
+                        <span>💬</span> Continue in AI Chat
+                      </button>
+
+                      <button
+                        onClick={() => setSelectedGoalIdModal(null)}
+                        style={{
+                          padding: '0.5rem 1.2rem', background: 'rgba(51,65,85,0.9)',
+                          color: '#e2e8f0', border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: '8px', fontWeight: 600, fontSize: '0.84rem', cursor: 'pointer',
+                        }}
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       )}

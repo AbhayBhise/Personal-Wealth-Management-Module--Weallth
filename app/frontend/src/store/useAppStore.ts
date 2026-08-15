@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { AuthUser, WHSSnapshot, Goal, RecommendationAlert, NetWorthHistory, FinancialSnapshot, PortfolioSummary, PortfolioPerformance, AssetAllocation, RebalancingAlerts, AIRetirementCoachMessage } from '../types';
+import { AuthUser, WHSSnapshot, Goal, RecommendationAlert, NetWorthHistory, FinancialSnapshot, PortfolioSummary, PortfolioPerformance, AssetAllocation, RebalancingAlerts, AIRetirementCoachMessage, GoalChatContext } from '../types';
 import { API_BASE, sendAIChatMessage, updatePreferences } from '../services/api';
 
 interface AppState {
@@ -34,7 +34,11 @@ interface AppState {
   chatHistory: { sender: 'user' | 'ai', text: string, suggestedFollowUps?: string[], diagnostics?: any }[];
   isChatOpen: boolean;
   isChatLoading: boolean;
+  pendingGoalContext: GoalChatContext | null;
+  setPendingGoalContext: (ctx: GoalChatContext | null) => void;
+  openChatWithGoalContext: (ctx: GoalChatContext) => void;
   toggleChat: () => void;
+  clearChatHistory: () => void;
   sendChatMessage: (message: string) => Promise<void>;
 
   // ─── Currency State ───────────────────────────────────────────────────────
@@ -142,8 +146,11 @@ export const useAppStore = create<AppState>()(
   chatHistory: [],
   isChatOpen: false,
   isChatLoading: false,
+  pendingGoalContext: null,
+  setPendingGoalContext: (ctx) => set({ pendingGoalContext: ctx }),
+  openChatWithGoalContext: (ctx) => set({ pendingGoalContext: ctx, isChatOpen: true }),
   toggleChat: () => set(state => ({ isChatOpen: !state.isChatOpen })),
-  clearChatHistory: () => set({ chatHistory: [] }),
+  clearChatHistory: () => set({ chatHistory: [], pendingGoalContext: null }),
   sendChatMessage: async (message: string) => {
     const { user, chatHistory } = get();
     if (!user) return;

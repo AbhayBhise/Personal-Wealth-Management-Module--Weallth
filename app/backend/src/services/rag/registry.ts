@@ -35,7 +35,7 @@ export const AI_MODULE_REGISTRY: Record<AIRequestPurpose, AIModuleDefinition> = 
       return { searchQuery: `goal shortfall risk mathematical options ${gName}`, categoryFilter: 'Goal' };
     },
     buildPrompt: (_query, context, contextText) => buildGoalAnalysisPrompt(context, contextText),
-    formatResponse: (req, raw, context) => formatGoalResponse(req.goalId || context.selectedGoal?.id || '', raw)
+    formatResponse: (req, raw, context) => formatGoalResponse(req.goalId || context.selectedGoal?.id || '', raw, context.selectedGoal?.name)
   },
   'priority-analysis': {
     purpose: 'priority-analysis',
