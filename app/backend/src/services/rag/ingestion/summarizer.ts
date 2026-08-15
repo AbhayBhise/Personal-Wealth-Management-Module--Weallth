@@ -7,7 +7,7 @@ export async function generateDocumentSummary(fullText: string, category: string
   }
 
   const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
   const prompt = `
 Summarize the following financial planning document section in exactly 3 sentences.

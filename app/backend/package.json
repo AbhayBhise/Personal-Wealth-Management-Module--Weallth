@@ -9,6 +9,10 @@
     "start": "node dist/index.js",
     "export:embeddings": "ts-node src/services/rag/exportEmbeddings.ts",
     "export:text": "ts-node src/services/rag/exportExtractedText.ts",
+    "rag:pipeline": "python3 src/services/rag/pipeline/build_rag_knowledge.py --pdf \"../../Weallth/Discover The Wealth Within You/Ric Edelman - Discover the Wealth Within You_ A Financial Plan For Creating a Rich and Fulfilling Life-HarperCollins (2010).pdf\" --out-dir src/services/rag/rag_out",
+    "rag:ingest": "ts-node src/services/rag/cli.ts ingest",
+    "rag:eval": "ts-node src/services/rag/eval_retrieval.ts",
+    "rag:build": "npm run rag:pipeline && npm run rag:ingest",
     "test": "vitest run src",
     "test:watch": "vitest"
   },
@@ -20,6 +24,7 @@
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.3",
+    "openai": "^7.4.0",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

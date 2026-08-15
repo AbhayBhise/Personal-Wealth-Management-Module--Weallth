@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from '@prisma/client';
+import { retrieveChunks, RagChunkRecord } from './retrieval';
 
 const prisma = new PrismaClient();
 
@@ -159,6 +160,50 @@ class VectorStore {
   public async search(queryVector: number[], options?: SearchOptions): Promise<VectorSearchResult[]> {
     if (!this.isAvailable) await this.initialize();
     
+    const searchQuery = options?.searchQuery || '';
+    if (searchQuery) {
+      const retrieved = await retrieveChunks(searchQuery, {
+        topK: options?.topK || 20,
+        topN: options?.topK || 5,
+        enablePreFilter: true,
+      });
+
+      return retrieved.map((r: RagChunkRecord) => ({
+        id: r.id,
+        score: Number((r.score || 0.85).toFixed(4)),
+        text: r.text,
+        metadata: {
+          id: r.id,
+          text: r.text,
+          category: r.category,
+          source: `${r.book} - ${r.chapter}`,
+          book: r.book,
+          author: 'Ric Edelman',
+          part: r.part || '',
+          chapter: r.chapter || '',
+          section: r.section || '',
+          subsection: 'General',
+          page_start: r.page_start,
+          page_end: r.page_end,
+          pages: r.pages,
+          document_order: parseInt(r.id.replace(/\D/g, ''), 10) || 1,
+          previous_chunk_id: r.previous_chunk_id,
+          next_chunk_id: r.next_chunk_id,
+          token_count: r.token_count,
+          keywords: r.keywords,
+          title: `${r.chapter}: ${r.section}`,
+          parent_doc_id: `${r.book}_${r.chapter}`.replace(/\s+/g, '_').toLowerCase(),
+          chunk_index: parseInt(r.id.replace(/\D/g, ''), 10) || 1,
+          total_chunks: 1,
+          is_summary: false,
+          summary_level: 'chunk',
+          embedding_version: 'gemini-embedding-001',
+          ingestion_timestamp: new Date().toISOString(),
+          content_hash: r.hash || ''
+        }
+      }));
+    }
+
     const topK = options?.topK || Number(process.env.RETRIEVAL_TOP_K) || 20;
     const minSimilarity = options?.minSimilarity || Number(process.env.RETRIEVAL_MIN_SIMILARITY) || 0.45;
     const vectorWeight = Number(process.env.RETRIEVAL_HYBRID_VECTOR_WEIGHT) || 0.7;

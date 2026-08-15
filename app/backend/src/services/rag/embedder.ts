@@ -7,6 +7,7 @@ class Embedder {
   private outputDimension = Number(process.env.EMBEDDING_DIMENSION) || 768;
   private lastRequestTime = 0;
   private minDelayMs = 1500; // Respect Gemini free tier RPM
+  private cache = new Map<string, number[]>();
 
   constructor() {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -31,6 +32,11 @@ class Embedder {
   }
 
   public async embed(text: string, retries = 3): Promise<number[]> {
+    const cacheKey = text.trim();
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey)!;
+    }
+
     try {
       await this.enforceRateLimit();
       const model = this.genAI.getGenerativeModel({ model: this.modelName });
@@ -38,7 +44,9 @@ class Embedder {
         content: { parts: [{ text }] },
         outputDimensionality: this.outputDimension
       });
-      return result.embedding.values;
+      const vec = result.embedding.values;
+      this.cache.set(cacheKey, vec);
+      return vec;
     } catch (error: any) {
       if (retries > 0 && (error?.status === 429 || error?.message?.includes('429'))) {
         console.warn(`[Embedder] Rate limited (429). Fast-retrying in 500ms... (${retries} retries left)`);

@@ -100,7 +100,7 @@ export function generateRecommendations(snapshot: FinancialSnapshot): Omit<Recom
       alert_message: `Retirement readiness is ${pct}%. At your current contribution rate, you may face a significant retirement income gap.`,
       reason: 'Compounding is most powerful in the early years. A delay of 5 years in retirement savings can reduce terminal wealth by more than 30%, per Edelman\'s compounding analysis.',
       expected_benefit: 'Each percentage point increase in savings rate today significantly reduces the retirement gap through compounding.',
-      action: 'Maximize employer 401(k) match first (free money), then contribute to a Roth IRA up to the annual limit. Review your retirement goal in the Goals section.',
+      action: 'Maximize your EPF/VPF contributions for tax-advantaged retirement savings, then review NPS (National Pension System) or ELSS SIP options based on your tax bracket and liquidity needs. Review your retirement goal in the Goals section.',
     });
   }
 

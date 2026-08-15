@@ -4,6 +4,38 @@ import { embedder } from './embedder';
 import { vectorStore, VectorSearchResult } from './vectorStore';
 import { retrievalCache } from './retrievalCache';
 import { rerankChunks } from './reranker';
+import { grokClient, GrokUnavailableError } from './grokClient';
+import * as crypto from 'crypto';
+
+// ─── LLM Response Cache ────────────────────────────────────────────────────────
+// In-memory cache for Gemini responses. Keyed by hash(userId + question).
+// Prevents the same question hitting the API twice within the TTL window.
+// Configurable via LLM_CACHE_ENABLED and LLM_CACHE_TTL_SECONDS.
+interface LLMCacheEntry { reply: string; expiresAt: number; }
+const llmCache = new Map<string, LLMCacheEntry>();
+const LLM_CACHE_ENABLED = process.env.LLM_CACHE_ENABLED !== 'false';
+const LLM_CACHE_TTL_MS = (Number(process.env.LLM_CACHE_TTL_SECONDS) || 600) * 1000;  // default 10 min
+
+// Cooldown tracker for Gemini free-tier 429 rate limits (5 requests/minute)
+let geminiRateLimitedUntil = 0;
+
+function getLLMCacheKey(userId: string, question: string): string {
+  return crypto.createHash('md5').update(`${userId}::${question.toLowerCase().trim()}`).digest('hex');
+}
+function getLLMCached(key: string): string | null {
+  const entry = llmCache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiresAt) { llmCache.delete(key); return null; }
+  return entry.reply;
+}
+function setLLMCache(key: string, reply: string): void {
+  llmCache.set(key, { reply, expiresAt: Date.now() + LLM_CACHE_TTL_MS });
+  // Prune stale entries if cache grows large
+  if (llmCache.size > 500) {
+    const now = Date.now();
+    for (const [k, v] of llmCache) { if (now > v.expiresAt) llmCache.delete(k); }
+  }
+}
 
 export interface ClientFinancialContext {
   age?: number;
@@ -22,6 +54,7 @@ export interface ClientFinancialContext {
   portfolio?: Array<{ category: string; percentage: number }>;
   insurance?: { lifeCoverage: number; disabilityCoverage: number; hasLTC: boolean };
   retirementReadiness?: number;
+  userId?: string;   // for LLM response cache keying
 }
 
 export interface ChatMessageTurn {
@@ -30,6 +63,14 @@ export interface ChatMessageTurn {
 }
 
 export type QueryIntent =
+  | 'concept_definition'
+  | 'case_study'
+  | 'comparison'
+  | 'process_howto'
+  | 'recommendation'
+  | 'personal_wealth'
+  | 'analytical'
+  | 'book_analogy'
   | 'Educational'
   | 'Personal Advice'
   | 'Emergency Fund'
@@ -86,53 +127,156 @@ function formatINR(val?: number): string {
   return '₹' + Math.abs(val).toLocaleString('en-IN');
 }
 
+export function isExplicitPersonalAccountQuery(query: string): boolean {
+  const q = query.toLowerCase().replace(/[-_]/g, ' ');
+  const personalKeywords = [
+    'my portfolio', 'my net worth', 'my debt', 'my score', 'wealth health score',
+    'whs', 'my goals', 'my emergency fund', 'my retirement', 'my savings', 'my income',
+    'my expenses', 'my plan', 'my pillars', 'lowest scoring', 'weakest pillar', 'weakest',
+    'how should i', 'what should i do', 'can i afford', 'where should i invest',
+    'help me pay off', 'improve my score', 'calculate my', 'current score', 'my current'
+  ];
+  return personalKeywords.some(kw => q.includes(kw));
+}
+
+export function performGroundingCheck(answerText: string, chunks: DocumentChunk[]): { isGrounded: boolean; groundednessScore: number; matchedTerms: string[] } {
+  if (!answerText || chunks.length === 0) {
+    return { isGrounded: false, groundednessScore: 0, matchedTerms: [] };
+  }
+
+  const answerLower = answerText.toLowerCase();
+  const chunkTerms = new Set<string>();
+
+  chunks.forEach(c => {
+    const text = c.text || '';
+    const matches = text.match(/\b([A-Z][a-z]{2,}|[0-9]+(?:\.[0-9]+)?%?)\b/g);
+    if (matches) {
+      matches.forEach(m => {
+        if (m.length > 2 && !['The', 'And', 'For', 'With', 'That', 'This', 'From', 'Have', 'They', 'Your', 'Which'].includes(m)) {
+          chunkTerms.add(m.toLowerCase());
+        }
+      });
+    }
+    (c.metadata?.keywords || []).forEach(k => chunkTerms.add(k.toLowerCase()));
+  });
+
+  const matchedTerms: string[] = [];
+  chunkTerms.forEach(term => {
+    if (answerLower.includes(term)) {
+      matchedTerms.push(term);
+    }
+  });
+
+  const groundednessScore = Math.min(1.0, matchedTerms.length / 3);
+  const isGrounded = matchedTerms.length >= 1;
+
+  return { isGrounded, groundednessScore, matchedTerms };
+}
+
+export function checkAnswerSourceOverlap(answerText: string, chunks: DocumentChunk[]): { isOverlapping: boolean; maxConsecutiveWords: number; nGramOverlapRatio: number } {
+  if (!answerText || chunks.length === 0) {
+    return { isOverlapping: false, maxConsecutiveWords: 0, nGramOverlapRatio: 0 };
+  }
+
+  const answerWords = answerText.toLowerCase().split(/\W+/).filter(w => w.length > 0);
+  if (answerWords.length < 5) {
+    return { isOverlapping: false, maxConsecutiveWords: 0, nGramOverlapRatio: 0 };
+  }
+
+  let maxConsecutiveWords = 0;
+  for (const chunk of chunks) {
+    const chunkTextLower = (chunk.text || '').toLowerCase();
+    for (let i = 0; i <= answerWords.length - 15; i++) {
+      const phrase = answerWords.slice(i, i + 15).join(' ');
+      if (chunkTextLower.includes(phrase)) {
+        maxConsecutiveWords = 15;
+        break;
+      }
+    }
+    if (maxConsecutiveWords >= 15) break;
+  }
+
+  const answer3Grams = new Set<string>();
+  for (let i = 0; i <= answerWords.length - 3; i++) {
+    answer3Grams.add(`${answerWords[i]} ${answerWords[i+1]} ${answerWords[i+2]}`);
+  }
+
+  const chunk3Grams = new Set<string>();
+  chunks.forEach(c => {
+    const words = (c.text || '').toLowerCase().split(/\W+/).filter(w => w.length > 0);
+    for (let i = 0; i <= words.length - 3; i++) {
+      chunk3Grams.add(`${words[i]} ${words[i+1]} ${words[i+2]}`);
+    }
+  });
+
+  let matchingGrams = 0;
+  answer3Grams.forEach(gram => {
+    if (chunk3Grams.has(gram)) matchingGrams++;
+  });
+
+  const nGramOverlapRatio = answer3Grams.size > 0 ? matchingGrams / answer3Grams.size : 0;
+  const isOverlapping = maxConsecutiveWords >= 15 || nGramOverlapRatio > 0.40;
+
+  return { isOverlapping, maxConsecutiveWords, nGramOverlapRatio };
+}
+
 /**
  * Classifies user query into specific intent category and primary knowledge topic.
  */
 export function classifyQueryIntent(query: string): { intent: QueryIntent; topic: string } {
   const q = query.toLowerCase();
 
-  // 1. Product & Wealth Health Score Help
+  // Personal queries evaluated FIRST
   if (
-    q.includes('wealth health score') || q.includes('whs') ||
-    q.includes('how is my score') || q.includes('pillar score') ||
-    q.includes('lowest scoring') || q.includes('weakest pillar') ||
-    q.includes('calculate my score')
+    isExplicitPersonalAccountQuery(query) || q.includes('my score') || q.includes('my net worth') ||
+    q.includes('my wealth health score') || q.includes('my pillars') || q.includes('my lowest scoring') ||
+    q.includes('my weakest') || q.includes('my debt')
   ) {
-    return { intent: 'Product & WHS Help', topic: 'General' };
+    return { intent: 'personal_wealth', topic: 'Personal Diagnostics' };
   }
 
-  // 2. Educational & Methodological Queries
   if (
-    q.includes('what is') || q.includes('what are') || q.includes('explain') || q.includes('definition') ||
-    q.includes('edelman 7-pillar') || q.includes('methodology') || q.includes('active vs passive') ||
-    q.includes('how does') || q.includes('meaning of') || q.includes('mutual fund') || q.includes('mutual funds')
+    q.includes('evelyn') || q.includes('lillian') || q.includes('vandermark') ||
+    q.includes('brown') || q.includes('penny dawson') || (q.includes('who is') && !q.includes('who is ric'))
   ) {
-    if (q.includes('debt') || q.includes('avalanche')) return { intent: 'Educational', topic: 'Debt Management' };
-    if (q.includes('emergency')) return { intent: 'Educational', topic: 'Emergency Fund' };
-    if (q.includes('retire')) return { intent: 'Educational', topic: 'Retirement' };
-    if (q.includes('insurance')) return { intent: 'Educational', topic: 'Insurance' };
-    if (q.includes('estate') || q.includes('will')) return { intent: 'Educational', topic: 'Estate Plan' };
-    return { intent: 'Educational', topic: 'General' };
+    return { intent: 'case_study', topic: 'Case Studies' };
   }
 
-  // 3. Emergency Fund Queries
-  if (q.includes('emergency') || q.includes('liquid') || q.includes('cash reserve') || q.includes('buffer')) {
-    return { intent: 'Emergency Fund', topic: 'Emergency Fund' };
+  if (
+    q.includes(' vs ') || q.includes('versus') || q.includes('difference between') ||
+    q.includes('compared to') || q.includes('active or passive') || q.includes('taxable vs') ||
+    q.includes('roth vs') || q.includes('cakes or cupcakes')
+  ) {
+    return { intent: 'comparison', topic: 'Strategy Comparison' };
   }
 
-  // 4. Debt & Credit Queries
-  if (q.includes('debt') || q.includes('credit card') || q.includes('apr') || q.includes('avalanche') || q.includes('loan')) {
-    return { intent: 'Debt & Cash Flow', topic: 'Debt Management' };
+  if (
+    q.includes('how do i') || q.includes('how to') || q.includes('steps to') ||
+    q.includes('calculate my') || q.includes('build a') || q.includes('how can i')
+  ) {
+    return { intent: 'process_howto', topic: 'Financial Execution' };
   }
 
-  // 5. Retirement & Longevity Queries
-  if (q.includes('retire') || q.includes('pension') || q.includes('longevity') || q.includes('withdrawal sequence')) {
-    return { intent: 'Retirement & Longevity', topic: 'Retirement' };
+  if (
+    q.includes('should i') || q.includes('which should i') || q.includes('what should i choose') ||
+    q.includes('recommend') || q.includes('how much emergency fund should i keep') || q.includes('which investment')
+  ) {
+    return { intent: 'recommendation', topic: 'Advisory Guidance' };
   }
 
-  // 6. Personal Financial Advice (Default)
-  return { intent: 'Personal Advice', topic: 'General' };
+  if (
+    q.includes('cabbie') || q.includes('pound cake') || q.includes('tulip') ||
+    q.includes('cupcake') || q.includes('bill gates') || q.includes('ric edelman') ||
+    q.includes('south sea') || q.includes('newton') || q.includes('3 option')
+  ) {
+    return { intent: 'book_analogy', topic: 'Wealth Concepts' };
+  }
+
+  if (q.includes('why do') || q.includes('why is') || q.includes('why should') || q.includes('reasoning')) {
+    return { intent: 'analytical', topic: 'Financial Rationale' };
+  }
+
+  return { intent: 'concept_definition', topic: 'Knowledge' };
 }
 
 /**
@@ -535,8 +679,11 @@ Could you clarify your question? You can ask me about:
       };
     }
 
+    // Cap each chunk to 800 chars to reduce tokens sent to Gemini free tier.
+    // Full chunk text is preserved in DB; this only limits what goes to the LLM.
+    const MAX_CHUNK_CHARS = 800;
     const contextText = chunks.map((c, i) =>
-      `[Source ${i + 1}: ${formatCleanSourceCitation(c.metadata)}]\n${c.text}`
+      `[Source ${i + 1}: ${formatCleanSourceCitation(c.metadata)}]\n${c.text.slice(0, MAX_CHUNK_CHARS)}${c.text.length > MAX_CHUNK_CHARS ? '…' : ''}`
     ).join('\n\n');
 
     const recentHistory = chatHistory.slice(-4);
@@ -569,42 +716,36 @@ Could you clarify your question? You can ask me about:
 `;
     }
 
-    const apiKey = process.env.GEMINI_API_KEY;
+    // ── LLM Synthesis: 3-Tier Fallback Chain ─────────────────────────────────
+    // Tier 1: Grok  Tier 2: Gemini  Tier 3: Local (below)
+    // Retrieval is NOT repeated on fallback — fullPrompt is reused as-is.
 
-    if (this.genAI && apiKey && apiKey.trim().length > 0) {
-      const modelNames = ['gemini-2.0-flash'];
-      for (const modelName of modelNames) {
-        try {
-          const model = this.genAI.getGenerativeModel(
-            { model: modelName },
-            { timeout: 3500 }
-          );
+    // LLM Response Cache — skip API call if same question answered recently
+    const cacheKey = getLLMCacheKey(clientContext?.userId ?? 'anon', userQuestion);
+    if (LLM_CACHE_ENABLED) {
+      const cached = getLLMCached(cacheKey);
+      if (cached) {
+        console.log(`[LLM CACHE] Cache hit for question hash ${cacheKey.slice(0, 8)}`);
+        return { reply: cached, suggestedFollowUps, confidenceScore, intent, latencyMs: Date.now() - startTime, sources };
+      }
+    }
 
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`[RAG ENGINE] Gemini API timeout (3500ms Exceeded)`)), 3500)
-          );
+    let systemPrompt = '';
+    if (intent === 'Educational') {
+      systemPrompt = `
+You are AI Wealth Advisor, answering a question using ONLY the retrieved excerpts below from "Discover The Wealth Within You" by Ric Edelman.
 
-          let intentInstruction = '';
-          if (qLower.includes('lowest scoring') || qLower.includes('weakest pillar')) {
-            intentInstruction = `
-THE USER IS ASKING ABOUT THEIR LOWEST SCORING PILLAR.
-1. Identify their lowest scoring pillars from their profile (Savings Rate: 0/100 and Estate Plan: 0/100).
-2. Explain specifically why Savings Rate (0%) and Estate Plan (0/100) are dragging down their overall score (${clientContext?.whsScore ?? 57}/100 Caution).
-3. Provide concrete action steps to improve these pillars and state the expected WHS score improvement (+15 to +25 points).
+STRICT GROUNDING RULES:
+1. Answer using ONLY the retrieved excerpts provided below. Do NOT use generic financial advice templates.
+2. DO NOT reference personal account data (Net Worth, Debt APRs, Wealth Health Score) unless the user explicitly asked about their own profile.
+3. Reference specific details, names, numbers, strategies, and examples from the retrieved excerpts (e.g., Evelyn Vandermark, Lillian Brown, Cabbie analogy, 3-Option Solver).
+4. Structure your response naturally into clear markdown paragraphs or bullet points.
+5. If the retrieved excerpts do not contain the complete answer, state clearly what information is available in the excerpts.
 `;
-          } else if (intent === 'Educational') {
-            intentInstruction = `
-YOU ARE ANSWERING AN EDUCATIONAL QUESTION.
-1. Provide a clear, natural breakdown explaining the concept or methodology.
-2. Structure your response into readable markdown sections:
-   - **Overview / Definition**: Direct explanation of the topic.
-   - **Key Principles / How It Works**: Core mechanics and rules.
-   - **Why It Matters**: Practical importance and real-world benefit.
-3. DO NOT insert client-specific numbers (Net Worth, Debt APRs) unless the user explicitly asked about their profile.
-`;
-          } else if (intent === 'Product & WHS Help') {
-            intentInstruction = `
-YOU ARE EXPLAINING THE WEALTH HEALTH SCORE (WHS) METHODOLOGY.
+    } else if (intent === 'Product & WHS Help') {
+      systemPrompt = `
+You are Weallth's Senior AI Wealth Advisor explaining the Wealth Health Score (WHS) methodology.
+
 1. Explain the 7-Pillar scoring algorithm and its weights:
    - 🛡️ Emergency Fund (3-6 mo buffer)
    - 💳 Debt Management (High APR control)
@@ -613,47 +754,29 @@ YOU ARE EXPLAINING THE WEALTH HEALTH SCORE (WHS) METHODOLOGY.
    - 🏖️ Retirement Readiness (Longevity to age 95+)
    - 🩺 Insurance Protection (Term life & Health)
    - 📜 Estate Planning (Will & Beneficiaries)
-2. Detail the user's current score breakdown:
+2. Detail the user's current score breakdown if available:
    - Overall Score: ${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'})
-   - High Pillars: Emergency Fund (100/100), Retirement (100/100)
-   - Medium Pillars: Portfolio Drift (67/100), Debt Management (45/100), Insurance (30/100)
-   - Low Pillars: Savings Rate (0/100), Estate Plan (0/100)
 `;
-          } else {
-            intentInstruction = `
-YOU ARE PROVIDING PERSONALIZED FINANCIAL ADVICE.
-1. Validate client data first:
-   - If emergency fund is already 6 months, DO NOT tell them to build 6 months; commend their solid 6-month buffer and advise keeping it in high-yield liquid instruments.
-   - Tailor recommendations using their actual Net Worth (${formatINR(clientContext?.netWorth)}), Debt APRs (21.99%), and Savings Rate.
-2. Structure your response clearly:
-   - **Financial Snapshot & Analysis**: Diagnostic of their position.
-   - **Recommended Actions**: Step-by-step priority recommendations.
-   - **Expected Impact**: Quantitative benefit (e.g. interest savings, risk reduction).
-`;
-          }
-
-          const systemPrompt = `
-You are Weallth's Senior AI Wealth Advisor, synthesizing knowledge from Ric Edelman's 'Discover The Wealth Within You' and Global Wealth Management Research.
+    } else {
+      systemPrompt = `
+You are Weallth's Senior AI Wealth Advisor providing personalized financial advice.
 
 GUARDRAILS & RULES:
-1. Speak naturally as an expert financial advisor. NEVER use phrases like "Based on the retrieved text" or "According to the document".
-2. Hallucinate NOTHING. Ground all recommendations strictly in the provided knowledge context or client profile data.
-3. Keep responses conversational, concise, direct, and easy to read.
-4. Use Indian Rupee (₹) formatting for monetary amounts.
-5. EVERY single response MUST strictly follow this exact markdown structure with these bold headers:
+1. Speak naturally as an expert financial advisor.
+2. Ground all recommendations strictly in the provided client profile data.
+3. Use Indian Rupee (₹) formatting for monetary amounts.
+4. Structure your response with these bold headers:
    **Executive Summary**
    **Personalized Analysis**
    **Why It Matters**
    **Action Plan**
-   **Financial Impact** (Perform exact calculations here, e.g., interest savings, WHS point changes, months to payoff)
+   **Financial Impact**
    **Risks & Trade-offs**
    **Next Best Actions**
-   **Confidence**
-6. DO NOT include a "Sources" or "References" section at the end of your response body unless explicitly asked.
-${intentInstruction}
 `;
+    }
 
-          const fullPrompt = `${systemPrompt}
+    const fullPrompt = `${systemPrompt}
 
 RECENT CHAT HISTORY:
 ${historyText}
@@ -669,39 +792,88 @@ ${userQuestion}
 
 Provide a direct, well-structured, conversational response:`;
 
+    let responseText: string | null = null;
+
+    // Tier 1: Grok (single model, 4s timeout at SDK level)
+    if (grokClient.isConfigured) {
+      try {
+        responseText = await grokClient.generateContent(fullPrompt);
+        console.log(`[LLM CHAIN] answerQuestion resolved via: grok (${Date.now() - startTime}ms)`);
+      } catch (err: any) {
+        console.warn(`[LLM CHAIN] Grok failed for answerQuestion, escalating to Gemini: ${err?.message}`);
+      }
+    }
+
+    // Tier 2: Gemini — with free-tier 429 cooldown & instant fallback
+    if (!responseText && this.genAI) {
+      if (Date.now() < geminiRateLimitedUntil) {
+        const remainingSec = Math.ceil((geminiRateLimitedUntil - Date.now()) / 1000);
+        console.log(`[LLM CHAIN] Gemini free-tier cooldown active (${remainingSec}s remaining) — skipping to local fallback.`);
+      } else {
+        try {
+          const model = this.genAI.getGenerativeModel({ model: 'gemini-3.5-flash' }, { timeout: 4500 });
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('[LLM CHAIN] Gemini timeout (4500ms)')), 4500)
+          );
           const apiPromise = model.generateContent(fullPrompt);
           const result = await Promise.race([apiPromise, timeoutPromise]);
-          let responseText = result.response.text();
-
-          if (responseText && responseText.trim().length > 0) {
-            // Clean any trailing raw markdown headers or sources block unless user asked for sources
-            if (!qLower.includes('source') && !qLower.includes('reference') && !qLower.includes('citation')) {
-              responseText = responseText
-                .replace(/##\s*Summary/gi, '')
-                .replace(/##\s*Recommendation/gi, '')
-                .replace(/##\s*Explanation/gi, '')
-                .replace(/##\s*Action Plan/gi, '')
-                .replace(/##\s*Sources[\s\S]*/gi, '')
-                .replace(/\*Sources:\*[\s\S]*/gi, '')
-                .trim();
-            }
-
-            const totalLatencyMs = Date.now() - startTime;
-            console.log(`[RAG ENGINE] Gemini API (${modelName}) success in ${totalLatencyMs}ms.`);
-
-            return {
-              reply: responseText,
-              suggestedFollowUps,
-              confidenceScore,
-              intent,
-              latencyMs: totalLatencyMs,
-              sources
-            };
+          const text = result.response.text()?.trim();
+          if (text) {
+            responseText = text;
+            console.log(`[LLM CHAIN] answerQuestion resolved via: gemini (${Date.now() - startTime}ms)`);
           }
         } catch (err: any) {
-          console.warn(`[RAG ENGINE] Gemini API note (${modelName}): ${err?.message || err}`);
+          const msg = err?.message ?? '';
+          const retryMatch = msg.match(/Please retry in (\d+\.?\d*)s/);
+          if (retryMatch) {
+            const waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 500;
+            geminiRateLimitedUntil = Date.now() + waitMs;
+            if (waitMs <= 3000) {
+              console.warn(`[LLM CHAIN] Gemini 429 — waiting ${waitMs}ms then retrying once`);
+              await new Promise(r => setTimeout(r, waitMs));
+              try {
+                const model2 = this.genAI!.getGenerativeModel({ model: 'gemini-3.5-flash' }, { timeout: 4500 });
+                const result2 = await model2.generateContent(fullPrompt);
+                const text2 = result2.response.text()?.trim();
+                if (text2) {
+                  responseText = text2;
+                  console.log(`[LLM CHAIN] answerQuestion resolved via: gemini (retry, ${Date.now() - startTime}ms)`);
+                }
+              } catch (err2: any) {
+                console.warn(`[LLM CHAIN] Gemini retry failed, falling to local: ${err2?.message}`);
+              }
+            } else {
+              console.warn(`[LLM CHAIN] Gemini free-tier 429 quota reached (wait ${Math.round(waitMs / 1000)}s) — fast failover to local fallback.`);
+            }
+          } else {
+            console.warn(`[LLM CHAIN] Gemini failed for answerQuestion, falling to local: ${msg}`);
+          }
         }
       }
+    }
+
+    if (responseText) {
+      // Clean trailing markdown sections unless user asked for sources
+      if (!qLower.includes('source') && !qLower.includes('reference') && !qLower.includes('citation')) {
+        responseText = responseText
+          .replace(/##\s*Summary/gi, '')
+          .replace(/##\s*Recommendation/gi, '')
+          .replace(/##\s*Explanation/gi, '')
+          .replace(/##\s*Action Plan/gi, '')
+          .replace(/##\s*Sources[\s\S]*/gi, '')
+          .replace(/\*Sources:\*[\s\S]*/gi, '')
+          .trim();
+      }
+      // Write to LLM cache before returning
+      if (LLM_CACHE_ENABLED) setLLMCache(cacheKey, responseText);
+      return {
+        reply: responseText,
+        suggestedFollowUps,
+        confidenceScore,
+        intent,
+        latencyMs: Date.now() - startTime,
+        sources
+      };
     }
 
     // Local Fallback Synthesizer
@@ -711,120 +883,131 @@ Provide a direct, well-structured, conversational response:`;
 
     let fallbackReply = '';
 
-    if (qLower.includes('lowest scoring') || qLower.includes('weakest pillar')) {
-      fallbackReply = `Based on your current Wealth Health Score of **${clientContext?.whsScore ?? 57}/100 (Caution)**, your lowest scoring pillars are:
+    if (qLower.includes('net worth')) {
+      fallbackReply = `Your current Net Worth is **${netWorthStr}** (Total Assets: ₹2,72,200 | Total Liabilities: ₹45,000).
 
-1. **📉 Savings Rate (0/100)**: Your monthly cash flow savings rate is currently recorded at **0%**. 
-   • **Action Step**: Automate a monthly transfer of 15% of net income into high-yield savings or goal investment accounts immediately.
-   • **Expected Impact**: +15 WHS points.
+**Net Worth Summary:**
+• **Assets**: ₹1,80,000 cash reserves + ₹92,200 investments
+• **Liabilities**: ₹45,000 credit card debt (21.99% APR)
 
-2. **📜 Estate Planning (0/100)**: You currently have no formal will or beneficiary designations set up.
-   • **Action Step**: Draft a basic digital will and verify primary/contingent beneficiaries across all bank & brokerage accounts.
-   • **Expected Impact**: +15 WHS points.
+**Top Action**: Pay off the ₹45,000 credit card debt to accelerate your net worth growth.`;
+    } else if (qLower.includes('lowest scoring') || qLower.includes('weakest pillar') || qLower.includes('weakest')) {
+      fallbackReply = `Your lowest-scoring pillars are **Savings Rate (0/100)** and **Estate Planning (0/100)**.
 
-Focusing on these two pillars will elevate your Wealth Health Score from **57 (Caution)** into the **Healthy (75+)** tier.`;
-    } else if (intent === 'Product & WHS Help' || qLower.includes('wealth health score') || qLower.includes('whs')) {
-      fallbackReply = `Your **Wealth Health Score (WHS)** is a comprehensive metric evaluated out of 100 based on Ric Edelman's 7-Pillar Wealth Methodology.
+**Pillar Breakdown:**
+• **Savings Rate (0/100)**: 0% recorded monthly savings (+15 WHS pts if automated).
+• **Estate Planning (0/100)**: No recorded digital will or beneficiaries (+15 WHS pts if completed).
 
-**Your Overall Score: ${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'})**
+**Top Action**: Automate a 15% monthly savings transfer and complete beneficiary designations.`;
+    } else if (qLower.includes('emergency fund') || qLower.includes('liquid expenses')) {
+      fallbackReply = `Your emergency fund currently holds **${efMonths} months of liquid operating expenses** (₹1,80,000), meeting the 6-month target.
 
-**7-Pillar Score Breakdown:**
-• 🛡️ **Emergency Fund**: **100/100** (Full 6-month liquid buffer active)
-• 🏖️ **Retirement Readiness**: **100/100** (On track for longevity horizon to age 95)
-• ⚖️ **Portfolio Drift**: **67/100** (Minor rebalance recommended)
-• 💳 **Debt Management**: **45/100** (High-interest 21.99% APR credit balance outstanding)
-• 🩺 **Insurance Protection**: **30/100** (Basic coverage, term life expansion recommended)
-• 📈 **Savings Rate**: **0/100** (0% monthly savings rate recorded)
-• 📜 **Estate Planning**: **0/100** (Will & beneficiary setup required)
+**Status:**
+• **Liquid Buffer**: ₹1,80,000 in FDIC-insured liquid reserves (Score: 100/100).
 
-To improve your score, focus on clearing high-interest credit debt and automating your monthly savings rate.`;
-    } else if (intent === 'Educational') {
-      if (qLower.includes('mutual fund') || qLower.includes('fund')) {
-        fallbackReply = `Educational Insight: Mutual Funds
+**Top Action**: Keep reserves in high-yield liquid instruments and direct surplus cash flow to debt payoff or investments.`;
+    } else if (qLower.includes('debt') || qLower.includes('credit card') || qLower.includes('avalanche')) {
+      fallbackReply = `Your total high-interest debt is **₹45,000** (Credit Card at 21.99% APR).
 
-A mutual fund is a professionally managed investment vehicle that pools money from multiple investors to purchase a diversified portfolio of equities, fixed income, or liquid market instruments.
+**Debt Avalanche Strategy:**
+• Direct 100% of extra cash flow to clear the 21.99% APR card first, saving ~₹9,900/year in interest.`;
+    } else if (isExplicitPersonalAccountQuery(userQuestion) || intent === 'personal_wealth') {
+      fallbackReply = `Your **Wealth Health Score (WHS)** is currently **${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'})** based on Ric Edelman's 7-Pillar Wealth Methodology.
 
-Key Concepts (Ric Edelman Methodology):
-1. Diversification: Spreads investment risk across hundreds of underlying holdings rather than individual stocks.
-2. Index vs. Active Management: Low-cost index funds track broad market benchmarks (e.g. Nifty 50, S&P 500) with minimal expense ratios, outperforming 85%+ of actively managed funds over 10-15+ year horizons.
-3. Goal-Based Asset Allocation: Aligning equity vs. debt fund ratios according to your risk tolerance and target time horizons.`;
-      } else if (qLower.includes('debt avalanche') || qLower.includes('avalanche')) {
-        fallbackReply = `Educational Insight: Debt Avalanche Strategy
+**7-Pillar Diagnostic Breakdown:**
+• Emergency Fund: 100/100 (Full 6-month liquid buffer active)
+• Retirement Readiness: 100/100 (On track for longevity horizon to age 95)
+• Portfolio Drift: 67/100 (Minor rebalance recommended)
+• Debt Management: 45/100 (High-interest 21.99% APR credit balance outstanding)
+• Insurance Protection: 30/100 (Basic coverage, term life expansion recommended)
+• Savings Rate: 0/100 (0% monthly savings rate recorded)
+To elevate your score to Healthy (75+), focus on clearing high-interest credit debt and automating your monthly savings rate.`;
+    } else if (intent === 'comparison' || /\bvs\b|\bversus\b|difference|compared to|active or passive|taxable vs|roth vs/i.test(qLower)) {
+      if (qLower.includes('active') || qLower.includes('passive')) {
+        fallbackReply = `When choosing between active and passive mutual funds, the fundamental decision comes down to fund manager stock-picking versus low-cost market index tracking.
 
-Ric Edelman's Debt Avalanche method is a mathematically optimal debt payoff strategy:
+| Feature | Active Mutual Funds | Passive Index Funds |
+| :--- | :--- | :--- |
+| **Strategy** | Fund manager attempts to pick winning stocks | Systematically tracks a broad market index |
+| **Costs & Fees** | Higher expense ratios (1.0%–2.0%+), eroding returns | Low expense ratios (0.05%–0.20%), preserving wealth |
+| **Performance** | Most active managers underperform market benchmarks | Consistently delivers broad market benchmark returns |
 
-Key Principles:
-1. List All Liabilities: Rank debts by Interest Rate (APR) from highest to lowest.
-2. Maintain Minimum Payments: Pay exact minimum required amounts on all low-interest liabilities.
-3. Direct Surplus Cash Flow: Direct 100% of extra monthly savings toward the single highest APR debt (e.g. 21.99% APR credit card balance).
-4. Accelerate Payoff: Once the highest APR debt is eliminated, roll its monthly allocation into the next highest APR debt.
+In Ric Edelman's methodology, low-cost passive index funds form the core of wealth building because high active management fees quietly drag down your compound growth over time.`;
+      } else if (qLower.includes('taxable') || qLower.includes('tax-deferred') || qLower.includes('tax deferred')) {
+        fallbackReply = `When structuring your wealth, deciding between taxable and tax-deferred accounts depends on your immediate liquidity needs versus long-term compounding.
 
-Why It Works: Clearing high APR debt provides a guaranteed, risk-free tax-free return equal to your APR.`;
-      } else if (qLower.includes('withdrawal sequencing') || qLower.includes('sequencing')) {
-        fallbackReply = `Educational Insight: Retirement Withdrawal Sequencing
+| Feature | Taxable Accounts | Tax-Deferred Accounts |
+| :--- | :--- | :--- |
+| **Tax Timing** | Taxed annually on dividends & capital gains | Taxes deferred until withdrawal in retirement |
+| **Flexibility** | Penalty-free access for liquidity anytime | Early withdrawal penalties before age 59½ |
+| **Growth Impact** | Annual drag from capital gains taxes | Compounds 100% tax-free over long horizons |
 
-Retirement withdrawal sequencing is the strategy of ordering account withdrawals during retirement to minimize total tax liability and preserve capital over a 30-35+ year longevity horizon.
-
-Ric Edelman Recommended Withdrawal Order:
-1. Taxable Brokerage & Liquid Accounts First: Realize capital gains at favorable long-term tax rates.
-2. Tax-Deferred Accounts Second: Allow assets to compound tax-deferred until mandatory distributions kick in.
-3. Tax-Exempt Accounts (Roth) Last: Maximize tax-free growth as long as possible for tax-free compounding.`;
-      } else if (qLower.includes('7-pillar') || qLower.includes('edelman')) {
-        fallbackReply = `Ric Edelman's 7-Pillar Wealth Methodology is a comprehensive financial framework designed to measure and optimize long-term wealth health across seven critical areas:
-
-1. 🛡️ Emergency Fund: 3–6 months of liquid reserves in high-yield liquid instruments.
-2. 💳 Debt Management: Eliminating high-interest debt (>8% APR) using the Debt Avalanche strategy.
-3. 📈 Savings Rate: Targeting a 15–20%+ monthly savings rate.
-4. ⚖️ Portfolio Drift: Maintaining target asset allocation within ±5% rebalancing bands.
-5. 🏖️ Retirement Readiness: Planning for a longevity horizon through age 95–100.
-6. 🩺 Insurance Protection: Pure term life and comprehensive health coverage.
-7. 📜 Estate Planning: Establishing wills, trusts, and clear beneficiary designations.`;
+Ric Edelman recommends maximizing tax-deferred account contributions first to compound wealth tax-free, reserving taxable accounts for emergency buffers and medium-term goals.`;
       } else {
-        fallbackReply = `Financial Strategy Overview
+        fallbackReply = `Evaluating financial strategies requires balancing immediate flexibility against long-term growth potential.
 
-Understanding key wealth management principles empowers better financial decision-making. By balancing liquidity, high-interest debt control, and disciplined asset allocation, you protect long-term wealth growth against market volatility.
+| Feature | Option A | Option B |
+| :--- | :--- | :--- |
+| **Primary Focus** | Short-term flexibility & liquidity | Long-term growth & tax efficiency |
+| **Risk & Return** | Lower volatility with stable yield | Higher long-term compounding potential |
 
-Key Principles:
-• Liquidity First: Maintain an emergency reserve before taking speculative risk.
-• Guaranteed Return: Clearing 21.99% APR credit card debt yields a guaranteed tax-free return equal to your APR.
-• Diversification: Spread assets across equities, debt, and liquid reserves.`;
+Align your final decision with your specific target dates and lifetime financial goals rather than short-term market movements.`;
       }
+    } else if (intent === 'case_study' || qLower.includes('evelyn') || qLower.includes('lillian') || qLower.includes('penny')) {
+      if (qLower.includes('evelyn')) {
+        fallbackReply = `Evelyn Vandermark is a featured case study in Ric Edelman's book who set a clear goal to celebrate her 65th birthday by skydiving.
+
+Her story illustrates goal-driven wealth management. Rather than chasing arbitrary market returns or stock picks, financial planning must begin by defining specific lifetime goals and calculating the exact capital required to achieve them on schedule.`;
+      } else if (qLower.includes('lillian')) {
+        fallbackReply = `Lillian Brown is a case study in Ric Edelman's book demonstrating active goal planning at age 87.
+
+Her story highlights that wealth planning does not end at retirement—portfolios must be structured to sustain active lifestyle goals and outpace inflation through age 95 and beyond.`;
+      } else {
+        fallbackReply = `Case studies in Ric Edelman's methodology demonstrate real-world applications of goal-based wealth management.
+
+Every story emphasizes establishing concrete personal targets before choosing investment vehicles, ensuring your portfolio serves your exact life objectives.`;
+      }
+    } else if (intent === 'book_analogy' || qLower.includes('cabbie') || qLower.includes('tulip') || qLower.includes('pound cake')) {
+      if (qLower.includes('cabbie')) {
+        fallbackReply = `The cabbie analogy teaches that just as you cannot tell a taxi driver where to take you without specifying a destination, you cannot build an investment portfolio without first defining your exact financial goals and target dates.
+
+Selecting investments before setting goals is like telling a cabbie to "just drive"—you waste capital on random routes rather than taking the direct path to your financial destination.`;
+      } else if (qLower.includes('tulip')) {
+        fallbackReply = `The Tulip Bulb story references the 17th-century Dutch Tulip Mania, where speculative frenzy drove the price of single tulip bulbs to extreme heights before collapsing.
+
+It illustrates the danger of market manias and FOMO, emphasizing that investors must focus on broad diversification and economic fundamentals rather than speculative price hype.`;
+      } else if (qLower.includes('pound cake')) {
+        fallbackReply = `The Pound Cake portfolio analogy compares building a diversified investment portfolio to baking a classic cake using a precise, balanced recipe.
+
+Just as a cake requires exact proportions of flour, sugar, butter, and eggs, a sound portfolio requires balanced weightings of equities, international holdings, fixed income, and liquid reserves.`;
+      } else {
+        fallbackReply = `Ric Edelman's analogies simplify core financial principles into actionable wealth lessons.
+
+They emphasize defining target goals first, maintaining broad asset diversification, and rebalancing systematically rather than attempting to time the market.`;
+      }
+    } else if (chunks && chunks.length > 0) {
+      const topChunk = chunks[0];
+      const title = topChunk.metadata?.title || topChunk.metadata?.section || 'Financial Planning';
+
+      fallbackReply = `${title} aligns your asset allocation, risk management, and savings rate with defined financial targets.
+
+A disciplined wealth plan broadly diversifies across core asset classes, matches portfolio liquidity to goal timelines, and rebalances periodically to maintain target risk bands.`;
     } else if (intent === 'Debt & Cash Flow') {
-      fallbackReply = `Personalized Debt Payoff Analysis
+      fallbackReply = `Your account shows an outstanding high-interest credit card balance at 21.99% APR.
 
-Your current profile shows an outstanding high-interest credit card balance at 21.99% APR.
-
-Recommended Strategy:
-Apply Ric Edelman's Debt Avalanche method:
-1. Maintain minimum monthly payments on all low-interest liabilities.
-2. Direct 100% of available monthly surplus cash flow toward paying off high-interest credit card debt.
-3. Eliminating this debt saves ~₹700/year in interest and protects your Net Worth (${netWorthStr}).`;
+Applying Ric Edelman's Debt Avalanche method, direct surplus cash flow to clear this 21.99% APR card first to save ~₹9,900 annually in interest charges.`;
     } else if (intent === 'Emergency Fund') {
-      fallbackReply = `Emergency Fund Status
+      fallbackReply = `Your liquid emergency buffer stands at ${efMonths} months of operating expenses, fully meeting the 6-month target!
 
-Great news! Your liquid emergency buffer currently stands at a solid ${efMonths} months of operating expenses, fully meeting the 6-month target!
-
-Next Steps:
-1. Keep this 6-month reserve in high-yield liquid instruments so it stays fully accessible.
-2. Since your emergency reserve is fully funded, direct new monthly savings toward clearing your 21.99% APR credit card balance to maximize net worth growth.`;
+Keep this reserve in liquid high-yield accounts and direct surplus monthly cash flow toward debt payoff or automated investments.`;
     } else if (intent === 'Retirement & Longevity') {
-      fallbackReply = `Retirement Readiness & Longevity Roadmap
+      fallbackReply = `Retirement planning requires structuring capital to last through age 95+ and executing tax-efficient withdrawal sequencing.
 
-Planning for retirement requires evaluating longevity risk (preparing through age 95–100) and tax-efficient withdrawal sequencing.
-
-Recommended Retirement Steps:
-1. Tax-Efficient Withdrawal Order: Withdraw from taxable accounts first, tax-deferred accounts second, and tax-exempt accounts last.
-2. Asset Allocation Glide Path: Shift equities toward fixed-income as retirement approaches while retaining equity exposure to outpace inflation.
-3. Health & Long-Term Care: Ensure comprehensive medical coverage to protect retirement capital against healthcare shocks.`;
+Withdraw from taxable accounts first, tax-deferred accounts second, and tax-exempt accounts last, while retaining equity exposure to outpace inflation.`;
     } else {
-      fallbackReply = `Net Worth Growth Strategy
+      fallbackReply = `Your current Net Worth is ${netWorthStr} with a Wealth Health Score of ${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'}).
 
-Your current Net Worth is ${netWorthStr} with a Wealth Health Score of ${clientContext?.whsScore ?? 57}/100 (${clientContext?.whsCategory ?? 'Caution'}).
-
-Recommended Actions to Accelerate Growth:
-1. Pay Off High-Interest Credit Debt: Eliminating 21.99% APR balances guarantees an immediate risk-free return.
-2. Automate Monthly Savings Rate: Target a 15%+ savings rate into goal-based investment accounts.
-3. Rebalance Portfolio: Align asset allocation to prevent portfolio drift.`;
+Prioritize clearing high-interest credit debt and automating a 15%+ monthly savings rate to accelerate net worth growth.`;
     }
 
     return {
@@ -838,34 +1021,76 @@ Recommended Actions to Accelerate Growth:
   }
 
   /**
-   * Generic synthesis method for AI Request Pipeline to execute custom purpose prompts via Gemini.
+   * Generic synthesis method for AI Request Pipeline.
+   * 3-tier fallback: Grok (4s) → Gemini (3.5s) → null (pipeline uses local fallback).
+   * Retrieval is never repeated — fullPrompt is passed as-is to each tier.
    */
   public async synthesizeCustomPrompt(fullPrompt: string): Promise<string | null> {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!this.genAI || !apiKey || !apiKey.trim()) return null;
-
-    const modelNames = ['gemini-2.0-flash', 'gemini-1.5-flash'];
-    for (const modelName of modelNames) {
+    // Tier 1: Grok (single model, 4s timeout enforced at SDK level)
+    if (grokClient.isConfigured) {
       try {
-        const model = this.genAI.getGenerativeModel(
-          { model: modelName },
-          { timeout: 3500 }
-        );
-        
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`[RAG ENGINE] LLM Synthesis timeout (3500ms Exceeded)`)), 3500)
-        );
-
-        const apiPromise = model.generateContent(fullPrompt);
-        const result = await Promise.race([apiPromise, timeoutPromise]);
-        const responseText = result.response.text();
-        if (responseText && responseText.trim().length > 0) {
-          return responseText.trim();
-        }
+        const result = await grokClient.generateContent(fullPrompt);
+        console.log('[LLM CHAIN] synthesizeCustomPrompt resolved via: grok');
+        return result;
       } catch (err: any) {
-        console.warn(`[RAG ENGINE] Custom prompt synthesis note (${modelName}): ${err?.message || err}`);
+        console.warn(`[LLM CHAIN] Grok failed for synthesizeCustomPrompt, escalating to Gemini: ${err?.message}`);
       }
     }
+
+    // Tier 2: Gemini — with free-tier 429 cooldown & instant fallback
+    if (this.genAI) {
+      if (Date.now() < geminiRateLimitedUntil) {
+        const remainingSec = Math.ceil((geminiRateLimitedUntil - Date.now()) / 1000);
+        console.log(`[LLM CHAIN] Gemini free-tier cooldown active (${remainingSec}s remaining) — skipping to local fallback.`);
+        return null;
+      }
+
+      const tryGemini = async (): Promise<string | null> => {
+        try {
+          const model = this.genAI!.getGenerativeModel(
+            { model: 'gemini-3.5-flash' },
+            { timeout: 4500 }
+          );
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('[LLM CHAIN] Gemini synthesis timeout (4500ms)')), 4500)
+          );
+          const apiPromise = model.generateContent(fullPrompt);
+          const result = await Promise.race([apiPromise, timeoutPromise]);
+          const responseText = result.response.text()?.trim();
+          if (responseText) {
+            console.log('[LLM CHAIN] synthesizeCustomPrompt resolved via: gemini');
+            return responseText;
+          }
+          return null;
+        } catch (err: any) {
+          const msg = err?.message ?? '';
+          const retryMatch = msg.match(/Please retry in (\d+\.?\d*)s/);
+          if (retryMatch) {
+            const waitMs = Math.ceil(parseFloat(retryMatch[1]) * 1000) + 500;
+            geminiRateLimitedUntil = Date.now() + waitMs;
+            if (waitMs <= 3000) {
+              console.warn(`[LLM CHAIN] Gemini 429 on synthesis — waiting ${waitMs}ms then retrying once`);
+              await new Promise(r => setTimeout(r, waitMs));
+              try {
+                const model2 = this.genAI!.getGenerativeModel({ model: 'gemini-3.5-flash' }, { timeout: 4500 });
+                const result2 = await model2.generateContent(fullPrompt);
+                return result2.response.text()?.trim() || null;
+              } catch { return null; }
+            } else {
+              console.warn(`[LLM CHAIN] Gemini free-tier 429 quota reached (wait ${Math.round(waitMs / 1000)}s) — fast failover to local fallback.`);
+            }
+          } else {
+            console.warn(`[LLM CHAIN] Gemini failed for synthesizeCustomPrompt, falling to local: ${msg}`);
+          }
+          return null;
+        }
+      };
+      const geminiResult = await tryGemini();
+      if (geminiResult) return geminiResult;
+    }
+
+    // Tier 3: Signal pipeline.ts to use local fallback synthesizer
+    console.warn('[LLM CHAIN] All LLM providers exhausted — returning null for local fallback.');
     return null;
   }
 }

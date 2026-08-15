@@ -143,6 +143,7 @@ export const useAppStore = create<AppState>()(
   isChatOpen: false,
   isChatLoading: false,
   toggleChat: () => set(state => ({ isChatOpen: !state.isChatOpen })),
+  clearChatHistory: () => set({ chatHistory: [] }),
   sendChatMessage: async (message: string) => {
     const { user, chatHistory } = get();
     if (!user) return;

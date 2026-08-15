@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { ingestKnowledgeBase, incrementalSync } from './ingestion/ingestor';
+import { runIngestion } from './ingestion/ingest';
 import { vectorStore } from './vectorStore';
 import { embedder } from './embedder';
 
@@ -9,25 +9,18 @@ async function main() {
   const namespace = command === 'test-query' ? 'production' : (args[1] || 'production');
 
   if (!command) {
-    console.error('Usage: npx ts-node cli.ts <command> [namespace]');
+    console.error('Usage: npx ts-node cli.ts <command> [outputDir]');
     console.error('Commands: ingest, sync, stats, deleteAll, test-query');
     process.exit(1);
   }
 
   try {
-    await vectorStore.initialize(namespace);
-    
     switch (command) {
       case 'ingest':
-        console.log(`Starting full ingestion for namespace: ${namespace}`);
-        const ingestStats = await ingestKnowledgeBase(namespace, false);
-        console.log('✅ Knowledge base ingestion complete!', ingestStats);
-        break;
-
       case 'sync':
-        console.log(`Starting incremental sync for namespace: ${namespace}`);
-        const syncStats = await incrementalSync(namespace);
-        console.log(`Skipped ${syncStats.skippedChunks}/${syncStats.totalChunks} unchanged, ${syncStats.newChunks} new/updated`);
+        console.log(`Starting RAG ingestion pipeline...`);
+        const ingestStats = await runIngestion(args[1]);
+        console.log('✅ Knowledge base ingestion complete!', ingestStats);
         break;
 
       case 'stats':

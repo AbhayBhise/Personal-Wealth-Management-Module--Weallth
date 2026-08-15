@@ -27,6 +27,8 @@ router.get('/users/:userId/net-worth', ctrl.getNetWorth);
 // ─── Goals ─────────────────────────────────────────────────────────────────────
 router.get('/users/:userId/goals', ctrl.getGoals);
 router.post('/users/:userId/goals', ctrl.createGoal);
+router.put('/users/:userId/goals/:goalId', ctrl.updateGoal);
+router.patch('/users/:userId/goals/:goalId', ctrl.updateGoal);
 router.get('/users/:userId/goals/:goalId/options', ctrl.getGoalOptions);
 router.delete('/users/:userId/goals/:goalId', ctrl.deleteGoal);
 

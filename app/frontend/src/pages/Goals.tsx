@@ -190,7 +190,17 @@ export default function Goals() {
       });
 
       if (!res.ok) throw new Error('Failed to delete goal');
-
+      setGoals(prev => prev.filter(g => g.id !== goalId));
+      setOptions(prev => {
+        const next = { ...prev };
+        delete next[goalId];
+        return next;
+      });
+      setCoachMessages(prev => {
+        const next = { ...prev };
+        delete next[goalId];
+        return next;
+      });
     } catch (err) {
       console.error('Error deleting goal:', err);
     }
@@ -202,11 +212,10 @@ export default function Goals() {
 
     setSubmittingEdit(true);
     try {
-      const res = await fetch(`${API_BASE}/users/${user.id}/goals`, {
-        method: 'POST',
+      const res = await fetch(`${API_BASE}/users/${user.id}/goals/${editingGoal.id}`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: editingGoal.id,
           name: editingGoal.name,
           category: editingGoal.category,
           priority: editingGoal.priority,
@@ -236,6 +245,17 @@ export default function Goals() {
           .then(msg => {
             if (msg) setCoachMessages(prev => ({ ...prev, [updatedGoal.id]: msg }));
           });
+      } else {
+        setOptions(prev => {
+          const next = { ...prev };
+          delete next[updatedGoal.id];
+          return next;
+        });
+        setCoachMessages(prev => {
+          const next = { ...prev };
+          delete next[updatedGoal.id];
+          return next;
+        });
       }
     } catch (err) {
       console.error('Error updating goal:', err);

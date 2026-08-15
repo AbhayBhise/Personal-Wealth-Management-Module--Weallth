@@ -50,12 +50,16 @@ research/source_documents/
 data/source_documents/
 
 # ─── RAG Knowledge Base (derived from copyrighted sources) ────────────
-# rag_knowledge.json is derived from Ric Edelman's copyrighted book.
-# 41.1% of its 689 chunks are verbatim HarperCollins-copyrighted text.
-# It must NOT be committed to any public repository.
+# rag_chunks.json and document_nodes.json contain copyrighted book text.
+# They must NOT be committed to any repository.
 # A sample_rag_knowledge.json (copyright-free placeholder) is committed instead.
-# Rebuild instructions: research/README.md
 app/backend/src/services/rag/rag_knowledge.json
+app/backend/src/services/rag/rag_chunks.json
+app/backend/src/services/rag/document_nodes.json
+app/backend/src/services/rag/rag_out/
+app/backend/src/services/rag/images/
+app/backend/src/services/rag/page_archive/
+rag_out/
 
 # ─── Obsolete Runtime Data Files ──────────────────────────────────────
 # data.json was the pre-Prisma file-backed database. Now fully obsolete.

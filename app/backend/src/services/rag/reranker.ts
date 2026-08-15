@@ -66,7 +66,7 @@ export async function rerankChunks(query: string, candidates: VectorSearchResult
 
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.5-flash' });
 
     const candidateTexts = candidates.map((c, i) => `${i + 1}. ${c.text.substring(0, 300)}`).join('\n\n');
 

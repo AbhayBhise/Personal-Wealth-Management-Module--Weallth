@@ -1,4 +1,4 @@
-import { ragEngine } from './engine';
+import { ragEngine, checkAnswerSourceOverlap } from './engine';
 import { AIPipelineRequest, AIPipelineResult, AIPipelineRawResult } from './types';
 import { validateInput, detectIntentFromPurposeAndQuery, validateConfidence, validateGeneratedResponse } from './validator';
 import { buildUnifiedContext } from './context/builder';
@@ -12,6 +12,13 @@ import { generatePriorityAnalysisFallback } from './prompts/priorityAnalysis';
 export class AIRequestPipeline {
   public async execute(req: AIPipelineRequest): Promise<AIPipelineResult> {
     const startTime = Date.now();
+
+    // Stage 0: Pipeline Response Cache Check (Instant 0-token return on repeated requests)
+    const pipelineCacheKey = aiCache.getPipelineCacheKey(req);
+    const cachedResponse = aiCache.getCachedResponse(pipelineCacheKey);
+    if (cachedResponse) {
+      return cachedResponse;
+    }
 
     // Stage 1: Purpose Detection & Module Lookup
     const purpose = req.purpose;
@@ -65,24 +72,27 @@ export class AIRequestPipeline {
       // Stage 7: Modular Prompt Builder
       const promptObj = moduleDef.buildPrompt(req.query || searchQuery, context, contextText);
 
-      // Stage 8: Shared RAG Engine LLM Synthesis with Stage 8b Response Validation & 1-Retry
+      // Stage 8: Shared RAG Engine LLM Synthesis with Stage 8b Response Validation & Overlap Guardrail
       let attempts = 0;
       let rawResponse: string | null = null;
-      const maxAttempts = retrievalResult.confidenceScore > 0.80 ? 1 : 2;
+      const maxAttempts = 1; // Free-tier optimization: 1 attempt to avoid 429 quota exhaustion
+      let currentPrompt = promptObj.fullPrompt;
 
       while (attempts < maxAttempts) {
         attempts++;
-        rawResponse = await ragEngine.synthesizeCustomPrompt(promptObj.fullPrompt);
+        rawResponse = await ragEngine.synthesizeCustomPrompt(currentPrompt);
         if (rawResponse) {
           const respCheck = validateGeneratedResponse(rawResponse, context);
+          const overlapCheck = checkAnswerSourceOverlap(rawResponse, retrievalResult.chunks);
+
+          if (overlapCheck.isOverlapping) {
+            console.warn(`[AI PIPELINE WARN] Generated response overlap check failed on attempt ${attempts}.`);
+            break;
+          }
+
           if (respCheck.isValid || attempts === maxAttempts) {
             reply = rawResponse;
-            if (!respCheck.isValid) {
-              console.warn(`[AI PIPELINE] Response validation failed on final attempt ${attempts}, proceeding anyway: ${respCheck.error}`);
-            }
             break;
-          } else {
-            console.warn(`[AI PIPELINE] Response validation failed on attempt ${attempts}: ${respCheck.error}`);
           }
         }
       }
@@ -142,7 +152,7 @@ export class AIRequestPipeline {
       sourcesCount: rawResult.sources.length
     }));
 
-    return {
+    const finalResult: AIPipelineResult = {
       purpose,
       intent,
       formattedOutput,
@@ -155,6 +165,12 @@ export class AIRequestPipeline {
         sources: rawResult.sources
       }
     };
+
+    // Cache the completed pipeline result
+    aiCache.setCachedResponse(pipelineCacheKey, finalResult);
+
+    return finalResult;
+
   }
 }
 

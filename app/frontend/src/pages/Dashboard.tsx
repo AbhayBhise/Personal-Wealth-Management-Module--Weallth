@@ -45,7 +45,7 @@ export default function Dashboard() {
     fetchDashboardData, dismissRecommendation,
     portfolioSummary, portfolioPerformance, assetAllocation, rebalancingAlerts,
     isLoadingPortfolio, fetchPortfolioData,
-    currency,
+    currency, toggleChat, sendChatMessage,
   } = useAppStore();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'portfolio'>('overview');
@@ -405,16 +405,39 @@ export default function Dashboard() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                 <span style={{ fontSize: '1.4rem' }}>🤖</span>
                 <div>
-                  <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', fontWeight: 700 }}>
-                    AI Priority Action Analysis
-                  </h3>
-                  <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-                    Powered by Ric Edelman Wealth Principles & Gemini RAG
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', fontWeight: 700 }}>
+                      AI Priority Action Analysis
+                    </h3>
+                    {/* Urgency badge — only rendered when AI returns urgency */}
+                    {explainers[selectedRecIdModal]?.explanation?.urgency && (
+                      <span style={{
+                        fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.55rem',
+                        borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.06em',
+                        background:
+                          explainers[selectedRecIdModal].explanation.urgency === 'High' ? 'rgba(239,68,68,0.18)' :
+                          explainers[selectedRecIdModal].explanation.urgency === 'Medium' ? 'rgba(245,158,11,0.18)' :
+                          'rgba(16,185,129,0.18)',
+                        color:
+                          explainers[selectedRecIdModal].explanation.urgency === 'High' ? '#f87171' :
+                          explainers[selectedRecIdModal].explanation.urgency === 'Medium' ? '#fbbf24' :
+                          '#34d399',
+                        border: `1px solid ${
+                          explainers[selectedRecIdModal].explanation.urgency === 'High' ? 'rgba(239,68,68,0.35)' :
+                          explainers[selectedRecIdModal].explanation.urgency === 'Medium' ? 'rgba(245,158,11,0.35)' :
+                          'rgba(16,185,129,0.35)'
+                        }`,
+                      }}>
+                        {explainers[selectedRecIdModal].explanation.urgency === 'High' ? '🔴' :
+                         explainers[selectedRecIdModal].explanation.urgency === 'Medium' ? '🟡' : '🟢'}
+                        {' '}{explainers[selectedRecIdModal].explanation.urgency}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <button 
+              <button
                 onClick={() => setSelectedRecIdModal(null)}
                 style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '1.5rem', cursor: 'pointer', lineHeight: 1 }}
               >
@@ -431,41 +454,83 @@ export default function Dashboard() {
                 </div>
               ) : explainers[selectedRecIdModal]?.explanation ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+
+                  {/* Issue — always shown */}
                   <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid #f87171' }}>
                     <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#f87171', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      1. The Financial Issue
+                      The Financial Issue
                     </div>
                     <p style={{ margin: 0, color: '#f1f5f9' }}>
                       {stripMarkdownText(explainers[selectedRecIdModal].explanation.issue)}
                     </p>
                   </div>
 
-                  <div style={{ background: 'rgba(245, 158, 11, 0.1)', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid #fbbf24' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#fbbf24', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      2. Why It Matters
+                  {/* Context — only rendered when present */}
+                  {explainers[selectedRecIdModal].explanation.context && (
+                    <div style={{ background: 'rgba(99, 102, 241, 0.08)', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid #818cf8' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#818cf8', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Why It Matters
+                      </div>
+                      <p style={{ margin: 0, color: '#c7d2fe' }}>
+                        {stripMarkdownText(explainers[selectedRecIdModal].explanation.context)}
+                      </p>
                     </div>
-                    <p style={{ margin: 0, color: '#f1f5f9' }}>
-                      {stripMarkdownText(explainers[selectedRecIdModal].explanation.matters)}
-                    </p>
-                  </div>
+                  )}
 
-                  <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid #34d399' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#34d399', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                      3. Recommended Action Plan
+                  {/* Action — only rendered when present; list if array, plain text if string */}
+                  {explainers[selectedRecIdModal].explanation.action && (
+                    <div style={{ background: 'rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '12px', borderLeft: '4px solid #34d399' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem', color: '#34d399', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Recommended Actions
+                      </div>
+                      {Array.isArray(explainers[selectedRecIdModal].explanation.action) ? (
+                        <ol style={{ margin: 0, paddingLeft: '1.2rem', color: '#f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                          {explainers[selectedRecIdModal].explanation.action.map((step: string, i: number) => (
+                            <li key={i} style={{ lineHeight: 1.5 }}>{stripMarkdownText(step)}</li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <p style={{ margin: 0, color: '#f1f5f9' }}>
+                          {stripMarkdownText(explainers[selectedRecIdModal].explanation.action)}
+                        </p>
+                      )}
                     </div>
-                    <p style={{ margin: 0, color: '#f1f5f9' }}>
-                      {stripMarkdownText(explainers[selectedRecIdModal].explanation.action)}
-                    </p>
-                  </div>
+                  )}
 
-                  <div style={{ background: 'rgba(99, 102, 241, 0.08)', padding: '1rem', borderRadius: '12px', border: '1px solid rgba(99, 102, 241, 0.2)', marginTop: '0.5rem' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#818cf8', marginBottom: '0.25rem' }}>
-                      📚 Knowledge Source & Methodology
+                  {/* Follow-up chips — only rendered when present; click opens AI chat pre-filled */}
+                  {Array.isArray(explainers[selectedRecIdModal].explanation.follow_ups) &&
+                   explainers[selectedRecIdModal].explanation.follow_ups.length > 0 && (
+                    <div>
+                      <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                        Ask AI Advisor
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                        {explainers[selectedRecIdModal].explanation.follow_ups.map((q: string, i: number) => (
+                          <button
+                            key={i}
+                            onClick={() => {
+                              setSelectedRecIdModal(null);
+                              setTimeout(() => {
+                                toggleChat();
+                                sendChatMessage?.(q);
+                              }, 200);
+                            }}
+                            style={{
+                              padding: '0.4rem 0.85rem', background: 'rgba(99,102,241,0.12)',
+                              border: '1px solid rgba(99,102,241,0.3)', borderRadius: '999px',
+                              color: '#a5b4fc', fontSize: '0.78rem', cursor: 'pointer',
+                              fontWeight: 500, transition: 'all 0.15s ease',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.25)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'rgba(99,102,241,0.12)')}
+                          >
+                            💬 {q}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#94a3b8' }}>
-                      Ric Edelman – Discover The Wealth Within You & Global Wealth Management Research (Debt Avalanche & Asset Allocation Strategy).
-                    </p>
-                  </div>
+                  )}
+
                 </div>
               ) : (
                 <div style={{ textAlign: 'center', color: '#94a3b8', padding: '2rem' }}>
@@ -482,7 +547,7 @@ export default function Dashboard() {
               <span style={{ fontSize: '0.78rem', color: '#64748b', fontStyle: 'italic' }}>
                 Advisory simulation only. Not financial advice.
               </span>
-              <button 
+              <button
                 onClick={() => setSelectedRecIdModal(null)}
                 style={{
                   padding: '0.5rem 1.25rem', background: '#334155', color: '#fff',

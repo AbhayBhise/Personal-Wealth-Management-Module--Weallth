@@ -50,9 +50,9 @@ It combines:
 |:---|:---|
 | **Frontend** | React 18, TypeScript, Vite, Zustand, Recharts, Vanilla CSS |
 | **Backend** | Node.js 18, Express 4, TypeScript |
-| **Database** | PostgreSQL 14 via Docker, Prisma ORM 5 |
-| **AI / LLM** | Google Gemini API (`gemini-1.5-flash`) |
-| **RAG Engine** | Custom TF-IDF + Semantic retrieval (in-process, no external vector DB) |
+| **Database** | PostgreSQL 16 + pgvector via Docker, Prisma ORM 5 |
+| **AI / LLM** | Tier 1: GroqCloud / xAI Grok (Fast LPU / Grok-3) · Tier 2: Google Gemini · Tier 3: Local Rule Synthesizer |
+| **RAG Engine** | PostgreSQL + pgvector Hybrid Search (Vector + Full-Text RRF) with In-Memory Response Caching |
 | **Auth** | JWT + bcryptjs |
 
 ---

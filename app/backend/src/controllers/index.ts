@@ -98,6 +98,22 @@ export const createGoal = asyncHandler(async (req: Request, res: Response) => {
   return res.status(201).json(goal);
 });
 
+export const updateGoal = asyncHandler(async (req: Request, res: Response) => {
+  const { userId, goalId } = req.params;
+  const { name, category, priority, target_amount, target_year, already_saved, monthly_contribution } = req.body;
+  const updated = await svc.updateGoal(userId, goalId, {
+    name,
+    category,
+    priority,
+    target_amount: target_amount !== undefined ? Number(target_amount) : undefined,
+    target_year: target_year !== undefined ? Number(target_year) : undefined,
+    already_saved: already_saved !== undefined ? Number(already_saved) : undefined,
+    monthly_contribution: monthly_contribution !== undefined ? Number(monthly_contribution) : undefined,
+  });
+  if (!updated) return res.status(404).json({ error: 'Goal not found.' });
+  return res.status(200).json(updated);
+});
+
 export const getGoalOptions = asyncHandler(async (req: Request, res: Response) => {
   const { userId, goalId } = req.params;
   const options = await svc.getGoalOptions(userId, goalId);

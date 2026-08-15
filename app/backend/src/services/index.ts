@@ -503,6 +503,41 @@ export async function createGoal(userId: string, body: {
   return repo.createGoal(userId, { ...body, shortfall: Math.round(shortfall) });
 }
 
+export async function updateGoal(userId: string, goalId: string, body: Partial<{
+  name: string; category: GoalCategory; priority: 'High' | 'Medium' | 'Low';
+  target_amount: number; target_year: number; already_saved: number; monthly_contribution: number;
+}>) {
+  const existingGoal = await repo.getGoalById(userId, goalId);
+  if (!existingGoal) return null;
+
+  const merged = {
+    name: body.name ?? existingGoal.name,
+    category: (body.category ?? existingGoal.category) as GoalCategory,
+    priority: (body.priority ?? existingGoal.priority) as 'High' | 'Medium' | 'Low',
+    target_amount: body.target_amount ?? existingGoal.target_amount,
+    target_year: body.target_year ?? existingGoal.target_year,
+    already_saved: body.already_saved ?? existingGoal.already_saved,
+    monthly_contribution: body.monthly_contribution ?? existingGoal.monthly_contribution,
+  };
+
+  const assumptions = await repo.getAssumptions(userId);
+  const years = yearsUntilYear(merged.target_year);
+  const inflationRate = merged.category === 'Education' ? assumptions.education_inflation
+    : merged.category === 'Retirement' ? assumptions.retirement_inflation
+    : assumptions.inflation_rate;
+  const returnRate = assumptions.expected_return;
+
+  const futureCost = calculateInflationAdjustedCost(merged.target_amount, inflationRate, years);
+  const fvAssets = calculateFutureValue(merged.already_saved, returnRate, years);
+  const fvSavings = calculateFutureValueOfSavings(merged.monthly_contribution, returnRate, years);
+  const shortfall = calculateGoalShortfall(futureCost, fvAssets, fvSavings, 0);
+
+  return repo.updateGoal(userId, goalId, {
+    ...merged,
+    shortfall: Math.round(shortfall),
+  });
+}
+
 export async function getGoalOptions(userId: string, goalId: string) {
   const goal = await repo.getGoalById(userId, goalId);
   if (!goal || goal.shortfall <= 0) return null;
@@ -819,7 +854,8 @@ async function fetchClientFinancialContext(userId: string): Promise<ClientFinanc
       } : undefined,
       retirementReadiness: whs?.score_retirement_readiness ?? 0,
       whsScore: whs?.score ?? 57,
-      whsCategory: whs?.category ?? 'Caution'
+      whsCategory: whs?.category ?? 'Caution',
+      userId,
     };
   } catch (err) {
     console.warn('[SERVICES] Warning fetching client context for RAG:', err);
@@ -885,9 +921,9 @@ export async function chatWithAdvisor(userId: string, message: string, chatHisto
   const farewells = ['bye', 'by', 'goodbye', 'see you', 'talk to you later', 'take care'];
   const grateful = ['thanks', 'thank you', 'thx', 'appreciate it'];
 
-  const isGreetingMatch = trimmed.length <= 20 && greetings.some(g => new RegExp(`\\b${g}\\b`, 'i').test(trimmed));
-  const isFarewellMatch = trimmed.length <= 20 && farewells.some(f => new RegExp(`\\b${f}\\b`, 'i').test(trimmed));
-  const isGratefulMatch = trimmed.length <= 25 && grateful.some(t => new RegExp(`\\b${t}\\b`, 'i').test(trimmed));
+  const isGreetingMatch = ['hi', 'hello', 'hey', 'good morning', 'good evening', 'good afternoon', 'hola', 'namaste'].includes(trimmed.replace(/[^\w\s]/g, '').trim());
+  const isFarewellMatch = ['bye', 'by', 'goodbye', 'see you', 'talk to you later', 'take care'].includes(trimmed.replace(/[^\w\s]/g, '').trim());
+  const isGratefulMatch = ['thanks', 'thank you', 'thx', 'appreciate it'].includes(trimmed.replace(/[^\w\s]/g, '').trim());
 
   if (isGreetingMatch) {
     return {

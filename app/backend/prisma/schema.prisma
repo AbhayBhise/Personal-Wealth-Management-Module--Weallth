@@ -236,6 +236,55 @@ model ComplianceSuitabilityLog {
   @@map("compliance_suitability_logs")
 }
 
+model DocumentNode {
+  id             String   @id @default(uuid())
+  book           String   @default("Discover The Wealth Within You")
+  part           String
+  chapter        String
+  section        String
+  pages          Int[]
+  isMetadataOnly Boolean  @map("is_metadata_only")
+  hasContent     Boolean  @map("has_content")
+  headingPrefix  String?  @map("heading_prefix")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([book])
+  @@index([part])
+  @@index([chapter])
+  @@map("document_nodes")
+}
+
+model RagChunk {
+  id                  String                     @id
+  book                String                     @default("Discover The Wealth Within You")
+  part                String?
+  chapter             String?
+  section             String?
+  pageStart           Int                        @map("page_start")
+  pageEnd             Int                        @map("page_end")
+  pages               Int[]
+  category            String
+  secondaryCategories String[]                   @map("secondary_categories")
+  keywords            String[]
+  concepts            String[]
+  entities            String[]
+  contentTypes        String[]                   @map("content_types")
+  tokenCount          Int                        @map("token_count")
+  text                String                     @db.Text
+  embeddingText       String                     @map("embedding_text") @db.Text
+  embedding           Unsupported("vector(768)")?
+  previousChunkId     String?                    @map("previous_chunk_id")
+  nextChunkId         String?                    @map("next_chunk_id")
+  hash                String?                    @map("hash")
+  createdAt           DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                   @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@index([part])
+  @@index([chapter])
+  @@map("rag_chunks")
+}
+
 model DocumentVectorChunk {
   id               String   @id
   book             String   @default("Discover The Wealth Within You")
